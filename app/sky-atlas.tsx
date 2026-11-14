@@ -1,7 +1,7 @@
 "use client";
 import { useMessage, useTranslation } from "@/lib/language";
 import { apiUrl, liveArchive } from "@/lib/site-mode";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type FormEvent, type Ref } from "react";
 import { Globe2, Search, Crosshair, Plus, Minus, Pause, Play, ArrowDown, LoaderCircle } from "lucide-react";
 import { loadAladin, type AladinApi, type SkyOverlay, type SkyViewer, type SkyImage } from "@/lib/aladin";
 import hipsSnapshot from "@/lib/spherex-hips.json";
@@ -12,10 +12,12 @@ import { validateFieldQuery } from "@/lib/field-query";
 import { frameTimeFraction, nearestFrameIndexAtFraction, type Manifest } from "@/lib/science";
 import "./sky-atlas.css";
 
+export type SkyAtlasControl = { goto: (ra: number, dec: number, fov?: number) => void; reveal: () => void };
 type Coverage = { query: SkySearchTarget; records: SkyObservation[]; sources: string[]; retrieved: string };
 const hipsMeta = cubeMetadata(hipsSnapshot.properties);
 
-export default function SkyAtlas({ manifest, onSearch, onCurrentSeries, link }: {
+export default function SkyAtlas({ manifest, onSearch, onCurrentSeries, link, controlRef, onCenterChange }: {
+  controlRef?: Ref<SkyAtlasControl>; onCenterChange?: (center: [number, number]) => void;
   language: "en" | "uk"; link?: ReturnType<typeof readAtlasLink>;
   manifest: Manifest | null; onSearch: (target: SkySearchTarget) => void; onCurrentSeries: () => void;
 }) {
@@ -103,6 +105,19 @@ export default function SkyAtlas({ manifest, onSearch, onCurrentSeries, link }: 
     else current.overlay.addFootprints([]);
   }, [selected, ready]);
 
+  const section = useRef<HTMLElement>(null);
+  const centerListener = useRef(onCenterChange);
+  useEffect(() => { centerListener.current = onCenterChange; }, [onCenterChange]);
+  // Report the map centre to the exposure viewer, throttled so dragging stays smooth.
+  useEffect(() => {
+    if (!ready) return;
+    const timer = setTimeout(() => centerListener.current?.(center), 120);
+    return () => clearTimeout(timer);
+  }, [center, ready]);
+  useImperativeHandle(controlRef, () => ({
+    goto: (ra, dec, fov) => goto(ra, dec, fov),
+    reveal: () => { setCollapsed(false); section.current?.scrollIntoView({ behavior: "smooth", block: "start" }); },
+  }));
   function goto(ra: number, dec: number, fov?: number) {
     engine.current?.viewer.gotoRaDec(ra, dec); if (fov) engine.current?.viewer.setFoV(fov);
     setCenter([ra, dec]);
@@ -169,7 +184,7 @@ export default function SkyAtlas({ manifest, onSearch, onCurrentSeries, link }: 
     setDetector(manifest.query?.detector ?? (Number(manifest.frames[0].detector.replace(/\D/g, "")) || 5));
   }
 
-  return <section className="sky-atlas" aria-label={t("Sky globe")}>
+  return <section ref={section} className="sky-atlas" aria-label={t("Sky globe")}>
     <div className="atlas-heading"><div><span className="section-label">{t("SKY MAP · STEP 1")}</span><h2><Globe2 size={25}/> {t("Sky globe")}</h2><p>{t("Move the sky to any spot, then ask the NASA archive when SPHEREx photographed it.")}</p></div><button className="button" onClick={() => setCollapsed(v => !v)} aria-expanded={!collapsed}>{collapsed ? t("Show map") : t("Hide map")}</button></div>
     <div hidden={collapsed}>
       <div className="atlas-layout"><aside className="atlas-controls">

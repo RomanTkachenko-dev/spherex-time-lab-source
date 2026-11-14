@@ -186,6 +186,17 @@ export const ukrainian: Record<string, string> = {
   "Press play and watch the exposures change over time.": "Натисніть ▶ і подивіться, як змінюються кадри з часом.",
   "Judge what moved: stars stay put, moving objects shift.": "Оцініть, що зрушило: зорі стоять, рухомі об’єкти зміщуються.",
 
+  "Click a point to show it on the sky globe": "Клацніть точку, щоб показати її на небесній сфері",
+  "Centre of the sky globe": "Центр небесної сфери",
+  "Show the sky globe's centre as a cyan cross on the images, and click any point of an image to move the globe there.": "Показувати центр небесної сфери бірюзовим хрестиком на кадрах; клацання по будь-якій точці кадру переводить сферу туди.",
+  "Link with sky globe": "Зв’язати зі сферою",
+  "Linking with the globe works in the fixed-sky view.": "Зв’язка зі сферою працює в режимі «Нерухоме небо».",
+  "The cyan cross marks the centre of the sky globe.": "Бірюзовий хрестик — центр небесної сфери.",
+  "The sky globe is centred {d}′ away from this field, outside the image.": "Центр сфери за {d}′ від цього поля, поза кадром.",
+  "Click any point of an image to show it on the globe.": "Клацніть будь-яку точку кадру, щоб показати її на сфері.",
+  "Globe moved to RA {ra}°, Dec {dec}°.": "Сферу переведено на RA {ra}°, Dec {dec}°.",
+  "Show on the globe ↑": "Показати на сфері ↑",
+
   // ── Frame navigation ─────────────────────────────────────────────────────
   "Enter a valid UTC date and time.": "Введіть коректну дату й час UTC.",
   "Nearest exposure: {n} · {date} UTC.": "Найближчий кадр: {n} · {date} UTC.",
