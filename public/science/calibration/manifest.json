@@ -1,0 +1,681 @@
+{
+  "schema_version": 1,
+  "spectral_source": "https://irsa.ipac.caltech.edu/data/SPHEREx/docs/spectral_files_20260812/SPHERExSpectralFiles_202607.tar",
+  "spectral_sha256": "45ff6c57ca68da00a595a4e8a5c2f875cc98b094fde143d9ce109e69df252f09",
+  "spectral_version": "SSDC R7, 202607; detector coordinates flipped in x for D4-D6",
+  "response_preprocessing": "negative laboratory transmission samples clipped to zero for nonnegative normalized response distance; original CSV hashes retained",
+  "detectors": {
+    "1": {
+      "file": "detector-1.npz",
+      "sha256": "a6c6c159b4527adb97380c72f24f0a18b99126d340fd30907254d50c2f44370d",
+      "bytes": 3761007,
+      "tiles": {
+        "0-0": {
+          "file": "map-1-0-0.npz",
+          "sha256": "901f4e1168401f99f14d36c0c48792b388115f0a3c2052a5c7eb8f4208eeca37",
+          "bytes": 3642971
+        },
+        "1-0": {
+          "file": "map-1-1-0.npz",
+          "sha256": "0c6fd6435915f77bba9a8a521d3b7334a1fa044c26bb6c8d94e99d35f2f7a629",
+          "bytes": 3590327
+        },
+        "2-0": {
+          "file": "map-1-2-0.npz",
+          "sha256": "7bbc79488806a67dfb21a0419bd7cce7da5b8ebd6f9689119004db9bb2e651f0",
+          "bytes": 3606299
+        },
+        "3-0": {
+          "file": "map-1-3-0.npz",
+          "sha256": "a90582d7192d01dca3a3759d787b364e63d690b9c718d6e926fa27d2c9c42d31",
+          "bytes": 3600048
+        },
+        "0-1": {
+          "file": "map-1-0-1.npz",
+          "sha256": "fb379b5259a5921278de444d018864a44332d852bf22ddfd430dd0897d410ecd",
+          "bytes": 3668409
+        },
+        "1-1": {
+          "file": "map-1-1-1.npz",
+          "sha256": "bd4cc1fbdc09c23761bdd33b9b2931e99b193dad895dba8fbe7c0451e90f4ea7",
+          "bytes": 3628067
+        },
+        "2-1": {
+          "file": "map-1-2-1.npz",
+          "sha256": "e01049782aa3451e5d30257fb18aacf7a70ba5f3774a59c0028a58a7f0f3894d",
+          "bytes": 3642734
+        },
+        "3-1": {
+          "file": "map-1-3-1.npz",
+          "sha256": "bff776d3b76505739acc62414ba9edab82616acdb87ce916017f280d5f1b3495",
+          "bytes": 3621295
+        },
+        "0-2": {
+          "file": "map-1-0-2.npz",
+          "sha256": "655fc1caeee2a29cf5e6a59dfbb577abaac1135fe3430837f89c26c6e005879e",
+          "bytes": 3676136
+        },
+        "1-2": {
+          "file": "map-1-1-2.npz",
+          "sha256": "6467005b2dc93959f053c2d95fae68fdf065448d0d079b209618d795731bcd9d",
+          "bytes": 3634793
+        },
+        "2-2": {
+          "file": "map-1-2-2.npz",
+          "sha256": "0fae1d661ed1d0d366f24ff1e92bdab4d34e7f49e156f5ff90cbf88b8476d676",
+          "bytes": 3647920
+        },
+        "3-2": {
+          "file": "map-1-3-2.npz",
+          "sha256": "fb77e24d4efe48067f07363cb9698355515c91f91ac7abd548c918d2e4e5f9ae",
+          "bytes": 3628482
+        },
+        "0-3": {
+          "file": "map-1-0-3.npz",
+          "sha256": "f56b08adc4846fc557be3c90b20f00fe1b424e78af2f2ee7cf4e32b30eafff49",
+          "bytes": 3625643
+        },
+        "1-3": {
+          "file": "map-1-1-3.npz",
+          "sha256": "782170709fd503394579fc8373fc1ea739454a7cecac5a4345797a5de1d98ca3",
+          "bytes": 3581141
+        },
+        "2-3": {
+          "file": "map-1-2-3.npz",
+          "sha256": "5242efc1c67368bd34d0610e6be2456f3904601eb020eb61e951ca71df4ed3d5",
+          "bytes": 3594124
+        },
+        "3-3": {
+          "file": "map-1-3-3.npz",
+          "sha256": "bd55036d56f170e35a1b51e5a06fcc86b152d82d4b0d0e983b719c4cc6be48f5",
+          "bytes": 3576250
+        }
+      },
+      "epsf_url": "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/qr3/epsf/cal-epsf-v1-2026-191/1/epsf_D1_spx_cal-epsf-v1-2026-191.fits",
+      "epsf_sha256": "f5eacb19eb90cb96a1684e9116b85f43f615ae5724c0aa26ac0c0ed45fa309e9",
+      "source_hashes": {
+        "channel_map": "e5b4003fcd5cdaf36277c58a742a3cec813916f6304aa083544e5cd4dca6d138",
+        "wave": "afc3b38150c60c254a67fef14051953f6af544bf13b64f06dd087deebb6fe009",
+        "width": "f2c3a7da24848301bf2f5756a8be56d20c7328c105e1bf94d273d53c31d06b64",
+        "summary": "b4bebda7c62a9c3c3bdd59fb47890f90e8a7600eb034153b457ae562f7ddb114",
+        "response_1": "a30f3e14a137fa9c781bd58ff6addc7389b4cb6180b9c0fd8b265d1bfe9a8781",
+        "response_2": "0e89ea4ec98469d250df52f608112fd0303c007871f2018cc70448a755044965",
+        "response_3": "0d5a724d38e39a909b3ac7d8ff954e6a7058673d6c7dd5a1de0d6b455a3e1ec2",
+        "response_4": "60f3f2af76b1b93c29594032e530fb7bc423a01392aa78ecbb427f838862baeb",
+        "response_5": "e32799702c3dca06d37d2b95a9fbef260423db91234e74aa1adba43b2b34fbd5",
+        "response_6": "f5712990df9a5357adbde2061b9848bbab002dba9824c754a83d81178525fe8d",
+        "response_7": "6201430256835461897b957b5371dcf0a4a425a97f346f5bd62d5773bd743316",
+        "response_8": "a8f494aca251c47d13db2f32df874b3e8fc273fd4167f17db01642b455114b32",
+        "response_9": "c24211e7c8f55fad3cd00bb8733b4af18b836def1a9b6db5ba63211ee36afb59",
+        "response_10": "80e9983a7952e3f99369275d92eb2044d8b61866bbf78e7b54e9a929524d3cff",
+        "response_11": "24121d85b7785f370502106ead84ebf3c585ff90b3fb7b874c289ee5e6da0c3a",
+        "response_12": "91e060f7edc06fe59607dc77751dc03ef2e36193a3eb6e760f54507bb3c4b13e",
+        "response_13": "dfb064bb0ca35d3812d9b6f19036fc8b35656923bf48aa6b7c321c75ab164d3a",
+        "response_14": "e5a33a83904fb110e5d85d41f397c64c8b0f77f7f9e57d6dfd1aea77cde08381",
+        "response_15": "c812716b7b3e07b73afedc4a3dd7a37e191b6d3086c1cade78fc90ca59c76a75",
+        "response_16": "7fdada70709b567cf2760f572c044bb03e520e2ff8b0155d8635e65d6816c7bd",
+        "response_17": "7ccba72a948539dd0cffabd763e759618b148c6f491b564ee91843e198356d6c"
+      }
+    },
+    "2": {
+      "file": "detector-2.npz",
+      "sha256": "e725ffa7371d9ec799093a24119417b2f34380c8c60d28d1f78865c35fb358bc",
+      "bytes": 3760797,
+      "tiles": {
+        "0-0": {
+          "file": "map-2-0-0.npz",
+          "sha256": "9630c5dfa89718c85b3c65a1822e328f3d6644997a0a83f3e393a26d1d0127d3",
+          "bytes": 3636819
+        },
+        "1-0": {
+          "file": "map-2-1-0.npz",
+          "sha256": "09ae9444986115dc8ba42c9c3da1955e9cbf6d2925ed183659a62351e836d631",
+          "bytes": 3584898
+        },
+        "2-0": {
+          "file": "map-2-2-0.npz",
+          "sha256": "e6cbfc66573defec552c11662c9199774543704b09b6e51134837f1bab9e247b",
+          "bytes": 3600049
+        },
+        "3-0": {
+          "file": "map-2-3-0.npz",
+          "sha256": "62951b49329ac8369cb6b7a04cb049913c7ec79796353f9cfa718a80049afadc",
+          "bytes": 3585380
+        },
+        "0-1": {
+          "file": "map-2-0-1.npz",
+          "sha256": "5aa2e6848f050c927d2f0e82b3ed981f3b902234ca6a4c06232eead7b14b366f",
+          "bytes": 3636401
+        },
+        "1-1": {
+          "file": "map-2-1-1.npz",
+          "sha256": "f0f2dcb04bb3d40e1ebb33c5488a1f6f91b4516439f4d78cb4d4a78a94873a66",
+          "bytes": 3579415
+        },
+        "2-1": {
+          "file": "map-2-2-1.npz",
+          "sha256": "fafea51eb7b684c51f51b7ebf552e2bc81dc8e72f26a2f136553ac48f661f454",
+          "bytes": 3594958
+        },
+        "3-1": {
+          "file": "map-2-3-1.npz",
+          "sha256": "3820266fd5792ee04830ab3ae542146fe8bb42db192018960cd0bcfba5b9653f",
+          "bytes": 3585152
+        },
+        "0-2": {
+          "file": "map-2-0-2.npz",
+          "sha256": "66947802ad17f1f3301c223b4f36070dd8ddec82458b9c97110019d13c8dea92",
+          "bytes": 3650182
+        },
+        "1-2": {
+          "file": "map-2-1-2.npz",
+          "sha256": "3d33ee3951d26aed4a9519a6bffb4bf2b630a6125c638aec977a926b9c900d05",
+          "bytes": 3596273
+        },
+        "2-2": {
+          "file": "map-2-2-2.npz",
+          "sha256": "46ace057a124b9fcca794856355a016c90a3e9f89012c983c5c2b7a23eb552e3",
+          "bytes": 3610613
+        },
+        "3-2": {
+          "file": "map-2-3-2.npz",
+          "sha256": "3fe178febed4b2964eb23c5cad4a565f68bf28cf83e152e1aafc574ec2ae802f",
+          "bytes": 3597763
+        },
+        "0-3": {
+          "file": "map-2-0-3.npz",
+          "sha256": "ebbd61cd3d4184a6164fe449871ef93c250d2d442ee28e5544be0d85699793ee",
+          "bytes": 3605268
+        },
+        "1-3": {
+          "file": "map-2-1-3.npz",
+          "sha256": "6e046bd90f7f4480f0f8f101f7076d7a01b82057c9ba6a7d667ced91936e0f7d",
+          "bytes": 3549604
+        },
+        "2-3": {
+          "file": "map-2-2-3.npz",
+          "sha256": "787902bb21e9cfad95f81baacdf20d88b629987cb8b510aa509d05e3153e0a4b",
+          "bytes": 3561751
+        },
+        "3-3": {
+          "file": "map-2-3-3.npz",
+          "sha256": "1b2c1547ffc79998d4b9f9b5bc17ed03340cc39117cf5a3ee8603e021266b877",
+          "bytes": 3552626
+        }
+      },
+      "epsf_url": "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/qr3/epsf/cal-epsf-v1-2026-191/2/epsf_D2_spx_cal-epsf-v1-2026-191.fits",
+      "epsf_sha256": "7b94af0250aa7e56a9e78af34ca2c1373985926c0a0f3263218d1b0ddc94a926",
+      "source_hashes": {
+        "channel_map": "e5b4003fcd5cdaf36277c58a742a3cec813916f6304aa083544e5cd4dca6d138",
+        "wave": "aa6079f1cabde9f9d22b47f3b9f3f9bc37dfdbaa9d799d902682b07b2171bbc7",
+        "width": "3660774ee1ebf82b7334711b6e9ff0d8e8932562f7ae801976bc3e25ffac1f27",
+        "summary": "d6774ce392ba2fbe9a6c472d03630b3a0271f75b359cf24e91a7786f9da6be2e",
+        "response_1": "5035a47ea7788cd1fd2daad155b5110ed319fb7ec8b19767a217b633ac8e60a3",
+        "response_2": "acce2efb5452362efd97933b050c137d1c28239dfb2488523c0a9adc66322282",
+        "response_3": "6024242e2c3233a1db22219b1fdedf25d413cda15919f51c8c754a436225ac8a",
+        "response_4": "8c6dd69ead0e20973bd97ca00bfd683c57bbd386ff4217305588d19e0c4ef3c3",
+        "response_5": "e82ec46989b73939ab477e91e2ee43b896f696764f4c2c8a602296b17fa87cbd",
+        "response_6": "3f3c3252ae72b6b1ea1be85d24eb7494fded91f076d3ff3fd1d21dbde5a6a628",
+        "response_7": "9aac825ca8c77abb7f953b45ad4fa4ba4c789988ec3011674417b03e42bd8073",
+        "response_8": "8600f3181ff00b1a9f88392b67d363f7e02b4adc2abb40557eda7cc8e70ce52f",
+        "response_9": "2eb51d31942b21715aba2cbc0c3870efe938eaa72ae793181530ad7e43961de3",
+        "response_10": "bd0a2765fdf77e04ec8703e0a268fed17e3453c6a70751e57331d0351fbf6e90",
+        "response_11": "9d056f92c3189e4595b2be8075b8a01636d41162234cc7d19cf686da53cce7f4",
+        "response_12": "2f7644c3658b3a30120b301014394018da3d448f686008a3b786377e408bfc80",
+        "response_13": "612041c537bf74a8f9692accc3123a0eec13f635a83adb01b2bedc29997be288",
+        "response_14": "b5d23609adcbafd65a3ef6f74e2bfcaca18cdfb0c176365b7aa37ab694def5ca",
+        "response_15": "c6f1db145be47875e25a891384bf806324769a7ef158de43f1dfcaf0ea4b614e",
+        "response_16": "d04f87d1f368492d87b423ff447f3e2d526839b305e961ca6d75c51125d64ff6",
+        "response_17": "9f88bbfe9e98766658bf1e5ef30433543e74499857eb363c56f6cd176b2374e2"
+      }
+    },
+    "3": {
+      "file": "detector-3.npz",
+      "sha256": "3575d26bbad0078a7c9db96fc3386bea7e3417a750dee813770860a6abeee37a",
+      "bytes": 3825434,
+      "tiles": {
+        "0-0": {
+          "file": "map-3-0-0.npz",
+          "sha256": "65735829cecb4c5cd4bc25bd21dbd458486145905defbb022a2dd733d63289c5",
+          "bytes": 3637184
+        },
+        "1-0": {
+          "file": "map-3-1-0.npz",
+          "sha256": "27b31a3e151f891989aadf58030a70b4b0860b3c38b0ccec842d0d6a430392fb",
+          "bytes": 3576607
+        },
+        "2-0": {
+          "file": "map-3-2-0.npz",
+          "sha256": "8ea5a3adef0fadb66e75849e568e0f834ed7e5e8b96d20ea4d51c4643d7ce474",
+          "bytes": 3597000
+        },
+        "3-0": {
+          "file": "map-3-3-0.npz",
+          "sha256": "851f2b6263fe4eb30fc3c6cbeaceb45e7a68fe770d2b6ea3b0f0f18ca7e5c34d",
+          "bytes": 3594677
+        },
+        "0-1": {
+          "file": "map-3-0-1.npz",
+          "sha256": "c4749b875dd2f2fc4e037b0a5e4d90e668b3562a3577005717a8f187589e41d2",
+          "bytes": 3625543
+        },
+        "1-1": {
+          "file": "map-3-1-1.npz",
+          "sha256": "f53c6142ee73ca456eea552587c291b7cc70a8fd502b6b19fcdce0536cd97115",
+          "bytes": 3567410
+        },
+        "2-1": {
+          "file": "map-3-2-1.npz",
+          "sha256": "a511fea499108b1677b1992f22b1320f529e8a2ddb8943618205b53bc9f51c26",
+          "bytes": 3587977
+        },
+        "3-1": {
+          "file": "map-3-3-1.npz",
+          "sha256": "ac5e6a57ea7cdfed66f65ba07c44fa852e948dc4ebb56b0e829c0021c33e2fea",
+          "bytes": 3581649
+        },
+        "0-2": {
+          "file": "map-3-0-2.npz",
+          "sha256": "3ecb19dade29e86d678f0105a7802d8738ab07ab5e8f38d7be0ebfbf7da29685",
+          "bytes": 3647453
+        },
+        "1-2": {
+          "file": "map-3-1-2.npz",
+          "sha256": "83633ad3954a0e1d48c544f8599216a4f4ad56c3e1f5e558b0097109999f43b9",
+          "bytes": 3597616
+        },
+        "2-2": {
+          "file": "map-3-2-2.npz",
+          "sha256": "5208c5cf98f9efb61ba69866e2bd43c51856c8a0e7a25dc70ac61fa0dfb7cbfc",
+          "bytes": 3615024
+        },
+        "3-2": {
+          "file": "map-3-3-2.npz",
+          "sha256": "04e0da3e7f0d97f5b07898df2d10da0ea891c63e5bc10d7943723912cbe1d825",
+          "bytes": 3597713
+        },
+        "0-3": {
+          "file": "map-3-0-3.npz",
+          "sha256": "48c93050f41bfe13a95e172b929f6449c1896b88e2bdfdbda1e8699052a410e0",
+          "bytes": 3590925
+        },
+        "1-3": {
+          "file": "map-3-1-3.npz",
+          "sha256": "dd1e573e9bb089797ac2236f7d60a24243e99ba3f394a3baac94f8323e46b535",
+          "bytes": 3533997
+        },
+        "2-3": {
+          "file": "map-3-2-3.npz",
+          "sha256": "41c46ad7d2d25fcfccd7b1f2a55adfb96e3cc8f3e34649adc2b800aa6ea1bd7a",
+          "bytes": 3550131
+        },
+        "3-3": {
+          "file": "map-3-3-3.npz",
+          "sha256": "1a1e67978953eb24e62dfaf0313658c0cd70305ee41611fa2d2a5b258cc96893",
+          "bytes": 3539508
+        }
+      },
+      "epsf_url": "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/qr3/epsf/cal-epsf-v2-2026-191/3/epsf_D3_spx_cal-epsf-v2-2026-191.fits",
+      "epsf_sha256": "6c753e5e322e9905fe44be6505e492f1943e3b115e5dea49b010140570dad2a1",
+      "source_hashes": {
+        "channel_map": "e5b4003fcd5cdaf36277c58a742a3cec813916f6304aa083544e5cd4dca6d138",
+        "wave": "05c28072eddc447489ce94649d4dc3ffcaedc011d0e3f3d15a2d77d8ff6640ec",
+        "width": "f62046acfbaf9f10797c00cc534e0ad3cb0a79d5ec34cb12d1cb45ad65b58fc0",
+        "summary": "405c3307cd7e2c7b0436e796d5eea4c4a81265287dc0c8b84adbf1605651e36b",
+        "response_1": "c6f8dcaa3a89fcfd5cab71cd3c6b0c557f3e1173ec6f96f92bb1d54ee894a5d7",
+        "response_2": "620711fd0a779ef2f5aa653f1a978e5e5e6ed8fdcf732eaf1dcdc04f973f563a",
+        "response_3": "58f0bf80fa0774c683ce92c83f1765dff4037b78017728183e2de2fa71e435a3",
+        "response_4": "78d72b843b24417a96ff7f3f4c27455db4f09d5948b9dcba97431fbdd0122fc7",
+        "response_5": "273a5b154b10a202fd5ac9b50ef5266fc562b184e06a6f70df77a5a6d5201838",
+        "response_6": "fe2346ca8d4704fbe6f9ede860bd5097e5735a74116ef929a6b8f0045fc8088f",
+        "response_7": "16807cfb294aff79bff3e519f1ba3e9d9a204e75ecf4aea266420c1837486155",
+        "response_8": "faec7f0b0872c5d82c6057e3712a9a50a161a63610d85b53fe5993274198ca0b",
+        "response_9": "8dc4b751d718152dbbedd951590fb69b9ab3a22e6dc85a191cb1e70219126156",
+        "response_10": "939794aa930e8831a8cc392f210b9fc5e56400eb0a24f82ac11e3f12a03ec784",
+        "response_11": "08b8f11f57dbe2a3cf49051f8ddbe398a94bc4892d2b70a7b184575f05a17689",
+        "response_12": "689d1b809aa8d20a504f8d7065344dfa22490d0b745eb6f35f747459d33827b5",
+        "response_13": "c7afa1c2599c180db1af6320de56aed0b84914827171ef0941d91a2e326bca0a",
+        "response_14": "4d3299c5fb553c8f30eb7af7a4c1435f56dde8da59dd44e2626d8cf3b2765616",
+        "response_15": "492cadf8cc361353c4c203d95710ad7e9a9815427eaeb56bb9e7580d4fb3df95",
+        "response_16": "79124cc5369cf3e66aae4439d99c3ca529a638e57d771778896cd1366432fe60",
+        "response_17": "709dbeffc80e0b1467ce2889229aa8bab5b95d5181e386665b65416b2cb0e2a7"
+      }
+    },
+    "4": {
+      "file": "detector-4.npz",
+      "sha256": "4437c26e77f277c61516460d8835d2c8fd1c3f3e364b8e4e5b89d9bc345686f0",
+      "bytes": 3796549,
+      "tiles": {
+        "0-0": {
+          "file": "map-4-0-0.npz",
+          "sha256": "146d95d4a7736b102c519ba371e776682c357aa96f06f592e41a88795f8b6103",
+          "bytes": 3626113
+        },
+        "1-0": {
+          "file": "map-4-1-0.npz",
+          "sha256": "e2c8a0e92a063261afff1e169a0af22579376729a0a85ecd73be65bb813f09b2",
+          "bytes": 3659491
+        },
+        "2-0": {
+          "file": "map-4-2-0.npz",
+          "sha256": "65ec3031329f4ae8fdc5249d35bd3cf686f9a2a0587adf9bcc9df98bc8e21b34",
+          "bytes": 3662206
+        },
+        "3-0": {
+          "file": "map-4-3-0.npz",
+          "sha256": "56a6a7c62192061268d9b596d5372eb18cbc3cf7edc1ad6e01f31ab4b542b9a0",
+          "bytes": 3643184
+        },
+        "0-1": {
+          "file": "map-4-0-1.npz",
+          "sha256": "04ad52195e8b2ccf1b9e7356df2c477d195db70600e169d7797a07967ff99ecf",
+          "bytes": 3610487
+        },
+        "1-1": {
+          "file": "map-4-1-1.npz",
+          "sha256": "613a23cdae074ff49810af258e3d1ce250456deb38d86d0ecfeb8bec024ce4df",
+          "bytes": 3639581
+        },
+        "2-1": {
+          "file": "map-4-2-1.npz",
+          "sha256": "738e67e3da7c5be0b0d56b54d5f5583fe29cad5fae4cd536e7cad35598101e09",
+          "bytes": 3643323
+        },
+        "3-1": {
+          "file": "map-4-3-1.npz",
+          "sha256": "21cef2f52c4300d9377357fbfdf280004780495e162569052b4cf9d93de05ba9",
+          "bytes": 3593764
+        },
+        "0-2": {
+          "file": "map-4-0-2.npz",
+          "sha256": "ab7b371ff3a13513c6f64371724e0448a5e740253912d1cd9a0b3bc1a4cb1f0c",
+          "bytes": 3610370
+        },
+        "1-2": {
+          "file": "map-4-1-2.npz",
+          "sha256": "41b98b5cf5b1360172276c70ca6f9f4759c3d7cbb970b0ea11fb1895ea44f3b1",
+          "bytes": 3630309
+        },
+        "2-2": {
+          "file": "map-4-2-2.npz",
+          "sha256": "b48d576abb597d91ac72543640eec9619c5a2062e7423b107bc38741f1fd2ceb",
+          "bytes": 3635483
+        },
+        "3-2": {
+          "file": "map-4-3-2.npz",
+          "sha256": "23777f317a9262923d3ec906e3d0360c98cb20be53c1c98452ccc2c946779470",
+          "bytes": 3620950
+        },
+        "0-3": {
+          "file": "map-4-0-3.npz",
+          "sha256": "7c51bbce0bd598bce359c221bfc68d54a99c4edc5ed66d25326e99c9950bdb03",
+          "bytes": 3563275
+        },
+        "1-3": {
+          "file": "map-4-1-3.npz",
+          "sha256": "ec5e3b4fdd3b458a10fe7650384ef27c7682a3a24094efeadafec78b291fce52",
+          "bytes": 3557869
+        },
+        "2-3": {
+          "file": "map-4-2-3.npz",
+          "sha256": "bb7d01421b1ed470f965997a377aca37519c9aeafe78b8d2d74add0410037221",
+          "bytes": 3563645
+        },
+        "3-3": {
+          "file": "map-4-3-3.npz",
+          "sha256": "0111324f588367cfc4937f46865c25845f24f85f4aeb5c0992ff78ec38e72206",
+          "bytes": 3556502
+        }
+      },
+      "epsf_url": "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/qr3/epsf/cal-epsf-v1-2026-191/4/epsf_D4_spx_cal-epsf-v1-2026-191.fits",
+      "epsf_sha256": "b37cb9423746477427121e2c3b3f4b8291c1df9cadba6f770ea1a7f962748b4c",
+      "source_hashes": {
+        "channel_map": "e5b4003fcd5cdaf36277c58a742a3cec813916f6304aa083544e5cd4dca6d138",
+        "wave": "6735e4fd694a81df134aec8edf0100c28bf61e9aecac889807b5fc06333ce99a",
+        "width": "934a69ad9087b8f0b0553ddf94d939d1e86a632649dc7fd2bf69316a765647ca",
+        "summary": "814cac8494457f8b7c5538f025a03bb3773c7168c49745dc23a85ef35f5bc438",
+        "response_1": "a2f3b49f4d5aefd9f11ac45d31bfb2a522faf92936f0daeb0035937b2f396487",
+        "response_2": "0f93c6ec6943b438351cbd8afd7a4d484f3c7016742c37f3dfc959abcca1cf69",
+        "response_3": "82dd57f512d40811f1bbc3b0460e16f6ab78de3f746bbce575b8b457acf3ff4a",
+        "response_4": "719b1bbfe45e542ab43b14c33a210537c5aafc51e90a7cf24ca7697fbc10247b",
+        "response_5": "dc6b69d1c9b3064da33f7ee6aded6b3db08b344ea16f2ff4ede44ada759ea64f",
+        "response_6": "1bfd44d22240e322168d142698a7f8fa590f4ade68942cfa647cc003a30ca428",
+        "response_7": "d5f31b572b298f938edda81b0ae5efd2cfcc7490f73bb89f08e94106dbb468ef",
+        "response_8": "62f81f3f9e93f3726feb4c175dd7e9771240f170a73283e093b7449d85922aee",
+        "response_9": "496870e00b8749e3e7cf06d6fc81927ed38825a315cbdc626d23aed5e235dc2b",
+        "response_10": "73285dfcd8aa7a266cc42e58f29a6080c53e4f2f8452eb3194732be9ed4ab17c",
+        "response_11": "f58a8c150e88a08b013db3b7dfc638ec9dcba83f77d3ed34e2b348d4b16878a8",
+        "response_12": "d35244b4b8838c4124f08b845b45ba3afc82b4d6d0cc4e78bead9d84daf207dd",
+        "response_13": "c531a4ba0762b1717048241a63bb20542512be616cdcc894df43f9930cda1386",
+        "response_14": "d7054d1ed81dd91f5b556bc4de5d16e967578665d13652c92ae87e9665571fca",
+        "response_15": "42f7c3086b6eea7b2d8569b35112efa99a88a1e0b84ad34a7fec1cbf8ff876ba",
+        "response_16": "16dee46994258b01ff69d4c1c607f16c25f24fd4bb582fa0178255e1a17b2e46",
+        "response_17": "bd74f3b9bca62acdcf4d36734c31d4d9e6b8e40bd9dc35d500f5c6a0887b9222"
+      }
+    },
+    "5": {
+      "file": "detector-5.npz",
+      "sha256": "bcdae8e37282fef2e1e06ec890cc046d3fcb42769547610005416b9bd4fb2494",
+      "bytes": 3768932,
+      "tiles": {
+        "0-0": {
+          "file": "map-5-0-0.npz",
+          "sha256": "bd5d9acc016cb76be3577c4cbb9e7864a94b819566830dfd2cca25a2f0500fcd",
+          "bytes": 3560758
+        },
+        "1-0": {
+          "file": "map-5-1-0.npz",
+          "sha256": "525c60f85931d0b7e5468076b26291bfd88c682f3deb7a57a7e50d018a8eabdf",
+          "bytes": 3504403
+        },
+        "2-0": {
+          "file": "map-5-2-0.npz",
+          "sha256": "d019994abeac18899557ea740b2f6164d116d2de926d4ead846af4f874e3bf84",
+          "bytes": 3505649
+        },
+        "3-0": {
+          "file": "map-5-3-0.npz",
+          "sha256": "4165aeb82553ec9e7b3f1f4a384bf972a0032e78796ca504b2abbe291cb93bd4",
+          "bytes": 3507912
+        },
+        "0-1": {
+          "file": "map-5-0-1.npz",
+          "sha256": "13c88eb24441dd0260cae10704490f9ace4d023c4e74bd814feb588cbcf329b8",
+          "bytes": 3553327
+        },
+        "1-1": {
+          "file": "map-5-1-1.npz",
+          "sha256": "9ff76a6994ff8f003623336519714e97197fcca0772e91ba9c441d43b1e3aabb",
+          "bytes": 3492013
+        },
+        "2-1": {
+          "file": "map-5-2-1.npz",
+          "sha256": "a2fbc9f5e21e747e5a16531ebdc746a06bad9659df5f217a1977af2e6a3960c4",
+          "bytes": 3492188
+        },
+        "3-1": {
+          "file": "map-5-3-1.npz",
+          "sha256": "9e3b0a85a439e726c61bfcfd3802561c3b5b888462e54d3edce206ffcb5b13ba",
+          "bytes": 3501708
+        },
+        "0-2": {
+          "file": "map-5-0-2.npz",
+          "sha256": "6af59ef62033551025b2a1ae2545251813d8ef124f830bb54df3e51c19ff9f63",
+          "bytes": 3555595
+        },
+        "1-2": {
+          "file": "map-5-1-2.npz",
+          "sha256": "ce390798173009eedc8d07856e473e9613ffc4fcfdcc5c7b42b3654822c6dc83",
+          "bytes": 3495168
+        },
+        "2-2": {
+          "file": "map-5-2-2.npz",
+          "sha256": "cccf08c06972e8cd6e90be92ad9f277f9e44f1086f17e191b73597e6db3829a4",
+          "bytes": 3495138
+        },
+        "3-2": {
+          "file": "map-5-3-2.npz",
+          "sha256": "764b9c37d3a7ef90a1a02c7002f3421c10b1ecc53339c7d6a06fb8c58bd92a83",
+          "bytes": 3504361
+        },
+        "0-3": {
+          "file": "map-5-0-3.npz",
+          "sha256": "914812fccd2ad21cd46224d5ed823d1526b7c0e4e6c4cf1150678c297a6f93fa",
+          "bytes": 3526724
+        },
+        "1-3": {
+          "file": "map-5-1-3.npz",
+          "sha256": "a0823c61f5bd77909cfb89b59916165e615010fa33278a7b05da851b85c3d3be",
+          "bytes": 3461396
+        },
+        "2-3": {
+          "file": "map-5-2-3.npz",
+          "sha256": "6b7fcf70d3fc149f7a224b06f85b04776dbb64e07eccf5fb225d97787d8ddead",
+          "bytes": 3458352
+        },
+        "3-3": {
+          "file": "map-5-3-3.npz",
+          "sha256": "92ab8670ad5002228c78fba4135e9fccae098190afa33dfcdfbc9b8c643eabe5",
+          "bytes": 3476604
+        }
+      },
+      "epsf_url": "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/qr3/epsf/cal-epsf-v1-2026-191/5/epsf_D5_spx_cal-epsf-v1-2026-191.fits",
+      "epsf_sha256": "73847447802363cbae37078d404a39f266ec3cca863461cacaae730e18facfe7",
+      "source_hashes": {
+        "channel_map": "e5b4003fcd5cdaf36277c58a742a3cec813916f6304aa083544e5cd4dca6d138",
+        "wave": "d20daa87d88ab3bacf7c68c3d6393e844d1c6d3f34d9de0b461e19f3d5a346de",
+        "width": "f33baa4de96e0bf0db320cbb755e0c544455499b70d792ac46c1d0ba27c81803",
+        "summary": "122cb273c28ad02d514966329c94ab4aba3158ec1be2e7c8f77bfe0b970b9739",
+        "response_1": "2b31d5870e96208f49f7cf66dc318901592e01b169c4323f2b040c5c169bbec3",
+        "response_2": "949858c5143b702b43acd33a2cf1837f032c10d0d60eaa721962a12de8cf28a8",
+        "response_3": "1961d495e65d0d46fe1e4ff45a2b8208b806756ae2e6d32a282bea9b4b7af117",
+        "response_4": "e045d621cfa520cfe39725a111e958b6d3ccd4c14daa51681a7fd56e00aceb46",
+        "response_5": "1fc42dbdbacaf28ea6354be6555d239b4bb9bd9c8246645f1ad00c691d816947",
+        "response_6": "00915cc5bf6d7cd49ad6765d19375731fc191c6df58eed277fc57e68459bab25",
+        "response_7": "40c4776d4d33dbbaf0106ee0b0ab54a9a4504291e461d65b2080d07d77392f2e",
+        "response_8": "144e2dc3207d5ecfeda13c649c5c72ed6fe1a79ae81af1cce9d66345b7cc9015",
+        "response_9": "78bc2828297f2fa7f79e8e275b9fcedf3e7d020d2de6f5d7cca338385fb01bc8",
+        "response_10": "6d053a06b821d3a3b1e10dbbdae86018d174296187bdcc682e87869f91f33213",
+        "response_11": "d4e6ed0ff5be7923ef5da09d94ee4ea612f7625b954d9b59b763b48029863a53",
+        "response_12": "e13b38eed1da1d8c0fb588c63fe8f7df373c309d69daa8bf97de40e4a15efebd",
+        "response_13": "81cb53b2fc3ad50eaac5dc22ea9c41318f38f96b459939d47733fc517369771e",
+        "response_14": "b7703670b49d9ccb28199b9fdeb1df9c46223aa665d347cfe5b9ba01e6117cf4",
+        "response_15": "5d2826089b3c55fbbbd7d4104ce345d2c721136beeb1b649206e1fd89de95109",
+        "response_16": "5fe7df8905d14912a3c955920bc4d5db095093a461a8628c953b1167b5f85b22",
+        "response_17": "35e7624ce5ece49f8e52b4fa5b3b585042ded5c0d46402c910fe4bdb9843cd3c"
+      }
+    },
+    "6": {
+      "file": "detector-6.npz",
+      "sha256": "6495d26feed2953ba88fcdd021b9458f837ef5c1968ed37293a115cef9cb9185",
+      "bytes": 3756332,
+      "tiles": {
+        "0-0": {
+          "file": "map-6-0-0.npz",
+          "sha256": "38537673c2d712874049401bede72bffb187d7b96ac1f06a417a3b36ac1e4720",
+          "bytes": 3598879
+        },
+        "1-0": {
+          "file": "map-6-1-0.npz",
+          "sha256": "1b0794022184ae3f213ce8a91a03418da6e5492fd863877ce4c98c69995fb4da",
+          "bytes": 3551413
+        },
+        "2-0": {
+          "file": "map-6-2-0.npz",
+          "sha256": "11f7453728c8126f7b9bd78eb8040fe344099381872faac9482f4fbd227864fd",
+          "bytes": 3556649
+        },
+        "3-0": {
+          "file": "map-6-3-0.npz",
+          "sha256": "8051a95f95fedce6f836af645ad2ea138a4e70342a86b6094f135bf0b18b5aaf",
+          "bytes": 3545083
+        },
+        "0-1": {
+          "file": "map-6-0-1.npz",
+          "sha256": "466af1617314136d5aded495dc413c51017bcca218ebe1b8b39fb8a6c5bde370",
+          "bytes": 3587198
+        },
+        "1-1": {
+          "file": "map-6-1-1.npz",
+          "sha256": "3f0da43933ba366cfbd44fadf7e30cbc035893bf677ebc0dafc55fd10c653e89",
+          "bytes": 3539276
+        },
+        "2-1": {
+          "file": "map-6-2-1.npz",
+          "sha256": "f40c6a3cec8b11ab452fc08d336bad49f6ee063de3fa7ae91f684cfab270e36e",
+          "bytes": 3543301
+        },
+        "3-1": {
+          "file": "map-6-3-1.npz",
+          "sha256": "aa202513f2d16db0534ea7a37f7b32f94d62229c824141f46986a7b6b3d1afa4",
+          "bytes": 3534805
+        },
+        "0-2": {
+          "file": "map-6-0-2.npz",
+          "sha256": "a97520223a52435b7a0522b724be38e95c16a9bad0dc082f9af1b48785d3b7e9",
+          "bytes": 3572986
+        },
+        "1-2": {
+          "file": "map-6-1-2.npz",
+          "sha256": "00fade616fc5e75ac81ca44be6aea664965080d14996710e819a7ef8a9a0e777",
+          "bytes": 3518113
+        },
+        "2-2": {
+          "file": "map-6-2-2.npz",
+          "sha256": "3c0112538dbd7a4e8f156d6f22f8f7e2555ada0edca44df7cf5200bc5897c0ab",
+          "bytes": 3525538
+        },
+        "3-2": {
+          "file": "map-6-3-2.npz",
+          "sha256": "6f056978a85628e11c94d26cec6eca3c952113c2e0bb3b5e28e03c796a63c6b6",
+          "bytes": 3522582
+        },
+        "0-3": {
+          "file": "map-6-0-3.npz",
+          "sha256": "0ace427e54a54b917985414db27d4b367d061d6c3b09764dc85268932b8724b1",
+          "bytes": 3507861
+        },
+        "1-3": {
+          "file": "map-6-1-3.npz",
+          "sha256": "88ae2366d465e78a1cede1f692afc5a1d753b066d2790b94c78a2a55900c79cc",
+          "bytes": 3451168
+        },
+        "2-3": {
+          "file": "map-6-2-3.npz",
+          "sha256": "7cda2c9f7d294d040a7121aa38c9c90fae7b477295d7e986c221f7c5d0f867f1",
+          "bytes": 3459582
+        },
+        "3-3": {
+          "file": "map-6-3-3.npz",
+          "sha256": "95f0c4ddd481f77c80ad3b68bb1f7d88102183c88dce81823c8803c753ca2f3e",
+          "bytes": 3457483
+        }
+      },
+      "epsf_url": "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/qr3/epsf/cal-epsf-v1-2026-191/6/epsf_D6_spx_cal-epsf-v1-2026-191.fits",
+      "epsf_sha256": "52f85faeb93d67ed2020b68a628fc947c1f0b78cbf9282ca193ec6d588ac1a36",
+      "source_hashes": {
+        "channel_map": "e5b4003fcd5cdaf36277c58a742a3cec813916f6304aa083544e5cd4dca6d138",
+        "wave": "99075ab66e3b0637161c66812df22b1ab2263c698681bf7b4901ca8b2006dec5",
+        "width": "2cef839f942e70e27c53143de10b8e58dfcc7d1809cf91e36dfa4563dd2bd53a",
+        "summary": "19c68dccb36ab2664718ed1679ce412f2e5557676fabb3da062c233168fc7ae6",
+        "response_1": "509a642a18a685b8cc789cb87dcfb48aea43fded70f7c40776a15e44b6497764",
+        "response_2": "0573960947e052b405276a95d539538f8c41a60784dd2320b1684e4896ed4194",
+        "response_3": "6597cd38c80d7c7e3090f6f4e18e4352255419165f250bc1c72a9da1c45df16d",
+        "response_4": "855e9a0324ca9863b66d4734388554184149d43b9734d9e47fd75a404e1a573b",
+        "response_5": "66122d5ee52a077a88cc41d08fcb0d732f8fd080d2d03ae5874f7bf902ee92e9",
+        "response_6": "9f2e2fcf5780f4bee9ce2e23f4e02757081a9df7fe994670b2b427bd4b33a865",
+        "response_7": "9dc50e45d68b9feb57ca3055b311e98334dfac30e432e76d6191d0dc6e4c4665",
+        "response_8": "7b7c07f4a63a0bc5d43d9b602aeaafb2472a68a9b29d70f9fe4ea7dbab60a7ed",
+        "response_9": "b80237049ed6a9a11fd90dffb815ae4f007c44f84202933353011b92dce092cf",
+        "response_10": "6237dd667e791036603d34c36ff678e74af4f943e63aeaef9f37be21999c120f",
+        "response_11": "f492ba80343a4ed6b52a7ae5d271744581ecbd1ab3b1642dad537f76f3675709",
+        "response_12": "7474e7349c4b8692fea8d86cd2d94f152176b121f2060128483c18bddfa90e3d",
+        "response_13": "60b9cc03dd5c6538045d7ad400d94ed5acf7cd30f886dccc0b0a069ac286ed9f",
+        "response_14": "11b2cdc47bda8e19493b3d6af23dc0abfc376f9cbd0c0a20b9adb94b37385378",
+        "response_15": "87688de60a071ed8ea67ea4c5311a9a6121e931377609991e1467177fe65baaa",
+        "response_16": "2e934080e431c5f21eb7f8ac01be64cb0455c09d1acd099215a54376ff4d7609",
+        "response_17": "436772898dd89165c7a28905b65bfbaa50b05f2fb76b1fbf89c3a6e70f815d83"
+      }
+    }
+  }
+}

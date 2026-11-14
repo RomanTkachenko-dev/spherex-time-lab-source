@@ -1,0 +1,8 @@
+# Actual local QR3 pilot environment: Python 3.12.14.
+# This lock is separate from the browser's pinned Pyodide runtime.
+numpy==2.5.3
+scipy==1.18.1
+astropy==8.0.1
+Pillow==12.3.0
+# Needed by the full unittest suite through build_dataset; the matrix runner uses urllib.
+requests==2.34.2
