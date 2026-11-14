@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { publicAsset } from "@/lib/site-mode";
 import { readDisplayAsset } from "@/lib/frame-assets";
 import type { Frame, Manifest } from "@/lib/science";
-import { decodeDisplay, differenceSummary, displayStretch, medianFrame, renderDifference, robustSigma, sampleIndices, subtractFrames, type DecodedFrame, type Stretch } from "@/lib/difference";
+import { selectAcrossTime } from "@/lib/field-query";
+import { decodeDisplay, differenceSummary, displayStretch, medianFrame, renderDifference, robustSigma, subtractFrames, type DecodedFrame, type Stretch } from "@/lib/difference";
 
 export type DifferenceReference = "reference" | "median" | "previous";
 export type DifferenceState = {
@@ -56,7 +57,7 @@ async function decode(frame: Frame, mode: "sky" | "object", stretch: Stretch, si
 
 export function differenceReferenceFrames(frames: Frame[], index: number, reference: number, kind: DifferenceReference): Frame[] {
   if (kind === "previous") return index > 0 ? [frames[index - 1]] : [];
-  if (kind === "median") return sampleIndices(frames.length, MEDIAN_SAMPLE).map(i => frames[i]);
+  if (kind === "median") return selectAcrossTime(frames, MEDIAN_SAMPLE);
   return frames[reference] ? [frames[reference]] : [];
 }
 

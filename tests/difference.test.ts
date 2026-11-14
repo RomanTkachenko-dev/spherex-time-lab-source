@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CLIP_HIGH, CLIP_LOW, checkerGray, decodeDisplay, differenceSummary, displayStretch, divergingColor, grayToValue, medianFrame, renderDifference, robustSigma, sampleIndices, subtractFrames, valueToGray, type DecodedFrame, type Stretch } from "../lib/difference.ts";
+import { CLIP_HIGH, CLIP_LOW, checkerGray, decodeDisplay, differenceSummary, displayStretch, divergingColor, grayToValue, medianFrame, renderDifference, robustSigma, subtractFrames, valueToGray, type DecodedFrame, type Stretch } from "../lib/difference.ts";
 
 const stretch: Stretch = { low: 0.2, high: 24, parameter: 18, checkerboard: true };
 const W = 16, H = 16;
@@ -56,9 +56,6 @@ test("differences, series median and robust sigma follow the definitions", () =>
   const median = medianFrame([frame([1, 9, NaN]), frame([3, NaN, NaN]), frame([100, 7, 4]), frame([2, 8, NaN])]);
   assert.deepEqual([...median.values].map(v => Number.isNaN(v) ? "nan" : v), [2.5, 8, "nan"], "moving source (100) does not enter the median");
   assert.throws(() => medianFrame([frame([1])]));
-  assert.deepEqual(sampleIndices(5, 31), [0, 1, 2, 3, 4]);
-  const sampled = sampleIndices(1000, 31);
-  assert.equal(sampled.length, 31); assert.equal(sampled[0], 0); assert.equal(sampled.at(-1), 999);
   // Gaussian-like noise with a few strong outliers: MAD sigma stays near the core width.
   const noise = Array.from({ length: 4000 }, (_, i) => Math.sqrt(-2 * Math.log((i + 0.5) / 4000)) * Math.cos(2 * Math.PI * ((i * 0.618034) % 1)) * 0.3);
   const sigma = robustSigma({ ...frame([...noise, 50, 60, -70]), height: 1 })!;

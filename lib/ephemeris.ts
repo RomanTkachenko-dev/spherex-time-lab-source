@@ -1,4 +1,5 @@
 import { sesameUrl } from "./sesame.ts";
+import { propagateGaia } from "./gaia.ts";
 export type EphemerisPoint = { mjd: number; ra: number; dec: number };
 export type HorizonsEphemeris = {
   source: "JPL Horizons";
@@ -32,20 +33,12 @@ export type ImportedEphemeris = HorizonsEphemeris | ProperMotionEphemeris;
 export const isProperMotion = (e: { source?: unknown } | null | undefined): e is ProperMotionEphemeris =>
   e?.source === "Proper motion (CDS Sesame)" || e?.source === "Proper motion (user-supplied)";
 
-const MAS_TO_RAD = Math.PI / 180 / 3_600_000;
 export const julianYearToMjd = (year: number) => 51544.5 + (year - 2000) * 365.25;
 
-/** Rigid rotation of the unit vector along the proper-motion great circle; no parallax or radial velocity. */
+/** Same constant proper-motion model as the Gaia overlay (`propagateGaia`); no parallax or radial velocity. */
 export function propagateProperMotion(reference: ProperMotionReference, mjd: number): { ra: number; dec: number } {
-  const years = (mjd - julianYearToMjd(reference.epoch_jyear)) / 365.25;
-  const ra = reference.ra * Math.PI / 180, dec = reference.dec * Math.PI / 180;
-  const p = [Math.cos(dec) * Math.cos(ra), Math.cos(dec) * Math.sin(ra), Math.sin(dec)];
-  const east = [-Math.sin(ra), Math.cos(ra), 0];
-  const north = [-Math.sin(dec) * Math.cos(ra), -Math.sin(dec) * Math.sin(ra), Math.cos(dec)];
-  const e = reference.pm_ra_masyr * years * MAS_TO_RAD, n = reference.pm_dec_masyr * years * MAS_TO_RAD;
-  const angle = Math.hypot(e, n), scale = angle < 1e-15 ? 1 : Math.sin(angle) / angle;
-  const moved = p.map((value, i) => value * Math.cos(angle) + (east[i] * e + north[i] * n) * scale);
-  return { ra: (Math.atan2(moved[1], moved[0]) * 180 / Math.PI + 360) % 360, dec: Math.asin(Math.max(-1, Math.min(1, moved[2]))) * 180 / Math.PI };
+  const { ra, dec } = propagateGaia({ source_id: "0", ra: reference.ra, dec: reference.dec, ra_error: null, dec_error: null, pmra: reference.pm_ra_masyr, pmdec: reference.pm_dec_masyr, pmra_error: null, pmdec_error: null, ref_epoch: reference.epoch_jyear, phot_g_mean_mag: null }, mjd);
+  return { ra, dec };
 }
 
 const dateMjd = (date: string) => Date.parse(date + "T00:00:00Z") / 86400000 + 40587;

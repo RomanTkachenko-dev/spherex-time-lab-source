@@ -85,12 +85,6 @@ export function medianFrame(frames: DecodedFrame[]): DecodedFrame {
   return { values, clipped, width, height };
 }
 
-/** Evenly spaced indices (always including first and last) for a bounded median stack. */
-export function sampleIndices(count: number, maximum: number): number[] {
-  if (count <= maximum) return Array.from({ length: count }, (_, i) => i);
-  return [...new Set(Array.from({ length: maximum }, (_, i) => Math.round(i * (count - 1) / (maximum - 1))))];
-}
-
 /** σ = 1.4826·MAD of finite, unclipped difference values; null when undefined or zero. */
 export function robustSigma(result: DifferenceResult): { sigma: number; median: number; used: number } | null {
   const sample: number[] = [];
