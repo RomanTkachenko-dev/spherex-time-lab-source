@@ -271,6 +271,12 @@ const exact: Record<string, string> = {
   "Для цієї цілі, періоду, релізу й детектора знайдено менше двох різних кадрів.": "Fewer than two different exposures were found for this target, period, release and detector.",
   "Навіть за одну UTC-добу збігів забагато для повного запиту; звузьте поле або додайте наукові фільтри.": "Even a single UTC day has too many matches for a full query; narrow the field or add science filters.",
   "Це обчислення вже працює в іншій вкладці. Спочатку призупиніть його.": "This job is running in another tab. Pause it there first.",
+  "Введіть назву астрономічного об’єкта (до 128 символів).": "Type an astronomical object name (up to 128 characters).",
+  "Служба астрономічних назв тимчасово недоступна.": "The astronomy name service is temporarily unavailable. Try again in a minute, or type RA and Dec yourself.",
+  "Відповідь служби назв перевищує ліміт.": "The name service sent too large a response.",
+  // lib/gaia.ts
+  "Відповідь Gaia містить незакритане CSV-поле.": "The Gaia response has an unterminated CSV field.",
+  "IRSA TAP повернув CSV без очікуваних колонок Gaia DR3.": "IRSA TAP returned a CSV without the expected Gaia DR3 columns.",
   // Static demo data (public/data/epochs/manifest.json)
   "Поле DR1 · різні епохи": "DR1 field · different epochs",
 };
