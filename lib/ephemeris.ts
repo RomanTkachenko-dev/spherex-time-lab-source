@@ -1,5 +1,6 @@
+import { sesameUrl } from "./sesame.ts";
 export type EphemerisPoint = { mjd: number; ra: number; dec: number };
-export type ImportedEphemeris = {
+export type HorizonsEphemeris = {
   source: "JPL Horizons";
   source_url: "https://ssd.jpl.nasa.gov/horizons/app.html";
   target_name: string;
@@ -10,9 +11,86 @@ export type ImportedEphemeris = {
   time_scale: "UTC";
   points: EphemerisPoint[];
 };
+/** Catalogue position at `epoch_jyear` with proper motion in mas/yr (pm_ra includes cos Dec). */
+export type ProperMotionReference = { ra: number; dec: number; pm_ra_masyr: number; pm_dec_masyr: number; epoch_jyear: number };
+export type ProperMotionEphemeris = {
+  source: "Proper motion (CDS Sesame)" | "Proper motion (user-supplied)";
+  /** Sesame query URL derived from `query_name`; null for values typed by the user. */
+  source_url: string | null;
+  target_name: string;
+  query_name: string | null;
+  resolver: string | null;
+  motion_reference: string | null;
+  retrieved_at: string | null;
+  reference: ProperMotionReference;
+  model: "linear-proper-motion-v1";
+  frame: "ICRS";
+  time_scale: "UTC";
+  points: EphemerisPoint[];
+};
+export type ImportedEphemeris = HorizonsEphemeris | ProperMotionEphemeris;
+export const isProperMotion = (e: { source?: unknown } | null | undefined): e is ProperMotionEphemeris =>
+  e?.source === "Proper motion (CDS Sesame)" || e?.source === "Proper motion (user-supplied)";
+
+const MAS_TO_RAD = Math.PI / 180 / 3_600_000;
+export const julianYearToMjd = (year: number) => 51544.5 + (year - 2000) * 365.25;
+
+/** Rigid rotation of the unit vector along the proper-motion great circle; no parallax or radial velocity. */
+export function propagateProperMotion(reference: ProperMotionReference, mjd: number): { ra: number; dec: number } {
+  const years = (mjd - julianYearToMjd(reference.epoch_jyear)) / 365.25;
+  const ra = reference.ra * Math.PI / 180, dec = reference.dec * Math.PI / 180;
+  const p = [Math.cos(dec) * Math.cos(ra), Math.cos(dec) * Math.sin(ra), Math.sin(dec)];
+  const east = [-Math.sin(ra), Math.cos(ra), 0];
+  const north = [-Math.sin(dec) * Math.cos(ra), -Math.sin(dec) * Math.sin(ra), Math.cos(dec)];
+  const e = reference.pm_ra_masyr * years * MAS_TO_RAD, n = reference.pm_dec_masyr * years * MAS_TO_RAD;
+  const angle = Math.hypot(e, n), scale = angle < 1e-15 ? 1 : Math.sin(angle) / angle;
+  const moved = p.map((value, i) => value * Math.cos(angle) + (east[i] * e + north[i] * n) * scale);
+  return { ra: (Math.atan2(moved[1], moved[0]) * 180 / Math.PI + 360) % 360, dec: Math.asin(Math.max(-1, Math.min(1, moved[2]))) * 180 / Math.PI };
+}
+
+const dateMjd = (date: string) => Date.parse(date + "T00:00:00Z") / 86400000 + 40587;
+/** Daily track from 00:00 UTC of `start` to the end of `end` (inclusive calendar days). */
+export function properMotionTrack(reference: ProperMotionReference, start: string, end: string): EphemerisPoint[] {
+  const first = dateMjd(start), last = dateMjd(end) + 1;
+  if (!Number.isFinite(first) || !Number.isFinite(last) || last <= first) throw Error("Некоректний інтервал дат для траєкторії власного руху.");
+  const days = Math.round(last - first), step = Math.max(1, Math.ceil(days / (MAX_TRACK_POINTS - 1)));
+  const points: EphemerisPoint[] = [];
+  for (let day = 0; day < days; day += step) points.push({ mjd: first + day, ...propagateProperMotion(reference, first + day) });
+  points.push({ mjd: last, ...propagateProperMotion(reference, last) });
+  return points;
+}
+
+/** Checks provenance and that every supplied point follows the declared linear model. */
+export function validateProperMotionEphemeris(input: Record<string, unknown>, points: EphemerisPoint[]): ProperMotionEphemeris {
+  const r = input.reference as Record<string, unknown> | null;
+  if (!r || typeof r !== "object") throw Error("Не вказано опорну позицію та власний рух.");
+  const reference: ProperMotionReference = { ra: Number(r.ra), dec: Number(r.dec), pm_ra_masyr: Number(r.pm_ra_masyr), pm_dec_masyr: Number(r.pm_dec_masyr), epoch_jyear: Number(r.epoch_jyear) };
+  const typed = (key: string) => typeof r[key] === "number" || (typeof r[key] === "string" && (r[key] as string).trim() !== "");
+  if (!["ra", "dec", "pm_ra_masyr", "pm_dec_masyr", "epoch_jyear"].every(typed) || !Object.values(reference).every(Number.isFinite) || reference.ra < 0 || reference.ra >= 360 || Math.abs(reference.dec) > 90) throw Error("Опорна позиція власного руху має некоректні координати.");
+  if (Math.abs(reference.pm_ra_masyr) > MAX_PROPER_MOTION_MASYR || Math.abs(reference.pm_dec_masyr) > MAX_PROPER_MOTION_MASYR || Math.hypot(reference.pm_ra_masyr, reference.pm_dec_masyr) === 0) throw Error(`Власний рух має бути ненульовим і не більшим за ${MAX_PROPER_MOTION_MASYR} мас/рік за компонентою.`);
+  if (reference.epoch_jyear < 1900 || reference.epoch_jyear > 2100) throw Error("Епоха опорної позиції має бути між 1900 і 2100 роками.");
+  const text = (key: string, limit: number) => typeof input[key] === "string" ? (input[key] as string).trim().slice(0, limit) : "";
+  const target_name = text("target_name", 129);
+  if (!target_name || target_name.length > 128 || /[\u0000-\u001f\u007f]/.test(target_name)) throw Error("Не вказано назву цілі з власним рухом.");
+  if (input.model !== "linear-proper-motion-v1" || input.frame !== "ICRS" || input.time_scale !== "UTC") throw Error("Невідома модель власного руху.");
+  for (const [i, point] of points.entries()) {
+    const expected = propagateProperMotion(reference, point.mjd);
+    // Chord length: acos() cannot resolve separations below about 1e-6 degrees.
+    const a = vector(expected), b = vector(point);
+    if (Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) * 180 / Math.PI > 1e-7) throw Error(`Позиція ${i + 1} не відповідає заявленому власному руху.`);
+  }
+  const model = { reference, model: "linear-proper-motion-v1", frame: "ICRS", time_scale: "UTC", points } as const;
+  if (input.source === "Proper motion (user-supplied)") return { source: input.source, source_url: null, target_name, query_name: null, resolver: null, motion_reference: null, retrieved_at: null, ...model };
+  const query_name = text("query_name", 129), resolver = text("resolver", 129), retrieved = text("retrieved_at", 40);
+  if (input.source !== "Proper motion (CDS Sesame)" || !query_name || query_name.length > 128 || /[\u0000-\u001f\u007f]/.test(query_name) || !resolver || resolver.length > 128 || !Number.isFinite(Date.parse(retrieved))) throw Error("Не вистачає метаданих походження власного руху з CDS Sesame.");
+  return { source: input.source, source_url: sesameUrl(query_name), target_name, query_name, resolver, motion_reference: text("motion_reference", 64) || null, retrieved_at: new Date(Date.parse(retrieved)).toISOString(), ...model };
+}
 
 const MONTHS: Record<string, number> = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
 const MAX_POINTS = 5000;
+const MAX_TRACK_POINTS = 1000;
+/** Operational bound; the fastest known star (Barnard) moves about 10 400 mas/yr. */
+const MAX_PROPER_MOTION_MASYR = 30000;
 
 function dateToMjd(date: string, time: string) {
   const match = /^(\d{4})-([A-Za-z]{3})-(\d{2})$/.exec(date);

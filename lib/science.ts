@@ -1,6 +1,7 @@
 import type { FieldQuery } from "./field-query";
 import type { GaiaReference } from "./gaia";
 import { MAX_CATALOGUE_PARTS, MAX_SERIES_FRAMES } from "./catalogue-batches.ts";
+import { isProperMotion } from "./ephemeris.ts";
 export type Frame = {
   id: string; observation_id: string; date: string; date_start: string; date_end: string;
   mjd: number; exposure_s: number; detector: string; release: string;
@@ -74,7 +75,7 @@ export function validateManifest(value: unknown): Manifest {
   }
   const ids=new Set<string>();
   m.frames.forEach((f,i)=>{
-    const expectedPositionKind=m.kind==='field'?(m.query?.most?'irsa-most-matched-position':m.query?.ephemeris?'user-supplied-horizons-ephemeris':'requested-sky-position'):'IRSA-predicted-per-exposure';
+    const expectedPositionKind=m.kind==='field'?(m.query?.most?'irsa-most-matched-position':m.query?.ephemeris?(isProperMotion(m.query.ephemeris)?'catalogue-proper-motion-propagated':'user-supplied-horizons-ephemeris'):'requested-sky-position'):'IRSA-predicted-per-exposure';
     if(typeof f.id!=="string"||!/^\w+$/.test(f.id)||ids.has(f.id)||!Number.isFinite(f.mjd)||!Number.isFinite(f.wavelength_um)||f.wavelength_um<=0||!Number.isFinite(f.bandwidth_um)||f.bandwidth_um<=0||!Number.isFinite(f.ra)||f.ra<0||f.ra>=360||!Number.isFinite(f.dec)||Math.abs(f.dec)>90||!f.marker_sky||!f.marker_object||!f.quality||typeof f.source_url!=="string"||!f.source_url.startsWith("https://irsa.ipac.caltech.edu/")|| !imageValid(f.image)||!imageValid(f.object_image)||(m.kind==='field'&&!imageValid(f.quality_mask_image))||f.measurement!==null||f.position_kind!==expectedPositionKind|| (i>0&&f.mjd<m.frames[i-1].mjd)) throw Error("Метадані спостережень неузгоджені.");
     const fractions=[f.quality.coverage_fraction,f.quality.usable_coverage_fraction,f.quality.flagged_display_fraction,f.quality.finite_coverage_fraction,f.quality.target_finite_coverage_fraction].filter((n):n is number=>n!==undefined);
     if(fractions.some(n=>!Number.isFinite(n)||n<0||n>1))throw Error("Некоректна частка покриття або маски якості.");

@@ -15,7 +15,7 @@ import { validateFieldQuery } from "@/lib/field-query";
 import { collectCatalogueParts, MAX_CATALOGUE_CHUNK_FRAMES, MAX_SERIES_FRAMES } from "@/lib/catalogue-batches";
 import { assembleCatalogueParts } from "@/lib/catalogue-merge";
 import type { FieldQuery } from "@/lib/field-query";
-import { parseHorizonsText, type ImportedEphemeris } from "@/lib/ephemeris";
+import { angularSeparationDeg, parseHorizonsText, properMotionTrack, propagateProperMotion, type HorizonsEphemeris, type ProperMotionEphemeris, type ProperMotionReference } from "@/lib/ephemeris";
 import { completeProcessingCheckpoint, deleteProcessingCheckpoint, listProcessingCheckpoints, type ProcessingCheckpointSummary } from "@/lib/processing-checkpoints";
 
 type ArchiveRecord = { id: string; observation: string; mjd: number; band: string; exposure_s: number | null; url: string; target_ra?: number; target_dec?: number };
@@ -23,7 +23,7 @@ type CataloguePart = { start: string; end: string; source_url: string; source_sh
 type ArchiveResult = { records: ArchiveRecord[]; truncated?: boolean; source_url: string; source_sha256: string; retrieved_at: string; matched_count: number; candidate_count: number; catalogue_truncated: boolean; selection: string; observation_table_parts?: CataloguePart[]; query: FieldQuery };
 type ArchiveResponse = Omit<ArchiveResult, "query"> & { query?: FieldQuery | null; error?: string };
 type ProgressState = { stage: string; completed: number; total: number; detail: string; storage?: { free_bytes: number; usage_bytes: number; estimated_remaining_bytes: number | null } | null };
-type ResolvedTarget = { query_name: string; canonical_name: string; ra: number; dec: number; object_type: string | null; reference_position: string | null; resolver: string; resolver_url: string; service: string };
+type ResolvedTarget = { query_name: string; canonical_name: string; ra: number; dec: number; object_type: string | null; reference_position: string | null; resolver: string; resolver_url: string; service: string; retrieved_at?: string; proper_motion?: { pm_ra_masyr: number; pm_dec_masyr: number; epoch_jyear: number; reference: string | null } | null };
 export type FieldSearchControl = { openAt: (target: SkySearchTarget) => void; prepareAt: (target: SkySearchTarget) => void };
 export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen: () => void; onPrepared: (manifest: Manifest, comparisonUrls?: [string,string]) => void | Promise<void>; controlRef?: Ref<FieldSearchControl> }) {
   const t = useTranslation();
@@ -34,7 +34,8 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
   const [motionMode, setMotionMode] = useState<"most"|"horizons">("most"), [mostName, setMostName] = useState("20000004");
   const [ra, setRa] = useState("167.2"), [dec, setDec] = useState("5.15");
   const [targetName, setTargetName] = useState(""), [resolvedTarget, setResolvedTarget] = useState<ResolvedTarget | null>(null), [resolving, setResolving] = useState(false);
-  const [ephemeris, setEphemeris] = useState<ImportedEphemeris|null>(null);
+  const [ephemeris, setEphemeris] = useState<HorizonsEphemeris|null>(null);
+  const [pmRa, setPmRa] = useState(""), [pmDec, setPmDec] = useState(""), [pmEpoch, setPmEpoch] = useState("2000");
   const [start, setStart] = useState("2025-12-14"), [end, setEnd] = useState("2025-12-14");
   const [fov, setFov] = useState("0.12"), [wavelengthMin, setWavelengthMin] = useState(""), [wavelengthMax, setWavelengthMax] = useState("");
   const [advanced, setAdvanced] = useState(false);
@@ -46,12 +47,20 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
   const worker = useRef<Worker | null>(null), request = useRef<AbortController | null>(null), timeout = useRef<ReturnType<typeof setTimeout> | null>(null), assetSeries = useRef<string|null>(null);
   const job = useRef(0);
   const requestedComparison = useRef<[string,string] | undefined>(undefined);
+  function clearMotion() { setPmRa(""); setPmDec(""); setPmEpoch("2000"); }
+  /** Reference position and proper motion typed in the form; null when no motion is given. */
+  function motionReference(): ProperMotionReference | null {
+    if (!pmRa.trim() && !pmDec.trim()) return null;
+    const reference = { ra: Number(ra), dec: Number(dec), pm_ra_masyr: Number(pmRa || 0), pm_dec_masyr: Number(pmDec || 0), epoch_jyear: Number(pmEpoch) };
+    if (ra.trim() === "" || dec.trim() === "" || !Object.values(reference).every(Number.isFinite)) throw Error(t("Власний рух потребує числових RA, Dec, компонент руху та епохи."));
+    return Math.hypot(reference.pm_ra_masyr, reference.pm_dec_masyr) > 0 ? reference : null;
+  }
   async function prepareAt(target: SkySearchTarget) {
     setOpen(true); onOpen();
     if (busy || resolving) { setError('Спочатку завершіть або зупиніть поточну обробку.'); return; }
     setMode('series');setPlace('custom');setRa(String(target.ra));setDec(String(target.dec));
     setStart(target.start);setEnd(target.end);setDetector(String(target.detector));setRelease(target.release);setSurvey(target.survey);setFov('0.12');
-    setTargetName('');setResolvedTarget(null);setEphemeris(null);setWavelengthMin('');setWavelengthMax('');setSelection('');
+    setTargetName('');setResolvedTarget(null);setEphemeris(null);clearMotion();setWavelengthMin('');setWavelengthMax('');setSelection('');
     stop(); const currentJob = job.current;
     requestedComparison.current = target.comparisonUrls;
     setBusy(true); setError(''); setResult(null); setExcluded([]);
@@ -138,7 +147,7 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
     if(busy||resolving)return;
     setPlace(value);
     setTargetName(""); setResolvedTarget(null);
-    setEphemeris(null);
+    setEphemeris(null); clearMotion();
     setMode("series");
     setResult(null); setError(""); setExcluded([]);
     if (value === "atlas") {
@@ -178,6 +187,9 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
       if (!response.ok) throw Error(body.error || "Не вдалося розпізнати назву.");
       if (!Number.isFinite(body.ra) || !Number.isFinite(body.dec) || body.ra < 0 || body.ra >= 360 || body.dec < -90 || body.dec > 90) throw Error("Служба повернула некоректні координати.");
       setRa(String(Number(body.ra.toFixed(8)))); setDec(String(Number(body.dec.toFixed(8))));
+      const motion = body.proper_motion;
+      if (motion && Number.isFinite(motion.pm_ra_masyr) && Number.isFinite(motion.pm_dec_masyr)) { setPmRa(String(motion.pm_ra_masyr)); setPmDec(String(motion.pm_dec_masyr)); setPmEpoch(String(motion.epoch_jyear)); }
+      else clearMotion();
       setPlace("custom"); setResolvedTarget(body);
     } catch(e) { setError(e instanceof Error ? e.message : "Не вдалося розпізнати назву."); }
     finally { setResolving(false); }
@@ -190,6 +202,9 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
     if (mostSearch && !mostName.trim()) { setError("Уведіть назву або NAIF ID цілі для пошуку IRSA MOST."); return; }
     if (place==="moving" && motionMode==="horizons" && !ephemeris) { setError("Для Horizons спочатку імпортуйте текстову ефемериду."); return; }
     if (place!=="moving" && targetName.trim() && !resolvedTarget) { setError("Спочатку розпізнайте назву кнопкою «Знайти координати» або очистьте її та введіть RA/Dec вручну."); return; }
+    let motion: ProperMotionReference | null = null;
+    try { motion = place === "moving" ? null : motionReference(); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); return; }
     stop();const currentJob=job.current;
     setBusy(true);setError("");setResult(null);setExcluded([]);setSelection("");
     setProgress({stage:"catalogue",completed:0,total:0,detail:"Пошук експозицій в IRSA…"});
@@ -210,6 +225,22 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
     } else if (place==="moving" && ephemeris) {
       delete payload.ra; delete payload.dec; delete payload.target_name;
       payload.ephemeris=ephemeris;
+    } else if (motion && mode === "series") {
+      // Sesame returns J2000 positions: centre every frame on the position propagated to its own epoch.
+      const track = { reference: motion, model: "linear-proper-motion-v1", frame: "ICRS", time_scale: "UTC" } as const;
+      const sesame = resolvedTarget?.proper_motion && resolvedTarget.proper_motion.pm_ra_masyr === motion.pm_ra_masyr && resolvedTarget.proper_motion.pm_dec_masyr === motion.pm_dec_masyr && resolvedTarget.proper_motion.epoch_jyear === motion.epoch_jyear ? resolvedTarget : null;
+      try {
+        const points = properMotionTrack(motion, String(payload.start), String(payload.end));
+        const moving: ProperMotionEphemeris = sesame
+          ? { ...track, source: "Proper motion (CDS Sesame)", source_url: sesame.resolver_url, target_name: sesame.canonical_name, query_name: sesame.query_name, resolver: sesame.resolver, motion_reference: sesame.proper_motion!.reference, retrieved_at: sesame.retrieved_at ?? new Date().toISOString(), points }
+          : { ...track, source: "Proper motion (user-supplied)", source_url: null, target_name: `RA ${motion.ra.toFixed(5)}° Dec ${motion.dec >= 0 ? "+" : ""}${motion.dec.toFixed(5)}° (J${motion.epoch_jyear})`, query_name: null, resolver: null, motion_reference: null, retrieved_at: null, points };
+        for (const key of ["ra", "dec", "target_name", "target_canonical_name", "target_resolver", "target_type", "target_reference"]) delete payload[key];
+        payload.ephemeris = moving;
+      } catch (e) { stop(); setProgress(null); setError(e instanceof Error ? e.message : String(e)); return; }
+    } else if (motion) {
+      // The exposure list searches a fixed cone: use the position propagated to the middle of the interval.
+      const middle = (Date.parse(String(params.get("start") || start) + "T00:00:00Z") + Date.parse(String(params.get("end") || end) + "T00:00:00Z")) / 2 / 86400000 + 40587.5;
+      if (Number.isFinite(middle)) { const now = propagateProperMotion(motion, middle); params.set("ra", String(now.ra)); params.set("dec", String(now.dec)); }
     }
     const controller=new AbortController();request.current=controller;
     try {
@@ -246,13 +277,22 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
       startWorker(currentJob,crypto.randomUUID(),body);
     } catch(e) { if(currentJob!==job.current)return;stop();if(!(e instanceof Error&&e.name==="AbortError"))setError(e instanceof Error?e.message:"Не вдалося виконати запит."); }
   }
+  let motionPreview: { now: { ra: number; dec: number }; shift: number } | null = null;
+  try {
+    const motion = place === "moving" ? null : motionReference();
+    const mjd = Date.parse(start + "T00:00:00Z") / 86400000 + 40587;
+    if (motion && Number.isFinite(mjd) && motion.ra >= 0 && motion.ra < 360 && Math.abs(motion.dec) <= 90) {
+      const now = propagateProperMotion(motion, mjd);
+      motionPreview = { now, shift: angularSeparationDeg(motion, now) * 3600 };
+    }
+  } catch { /* Incomplete input: the submit handler reports it. */ }
   useImperativeHandle(controlRef, () => ({ openAt: target => {
     setOpen(true); onOpen();
     if (busy || resolving) { setError("Спочатку завершіть або зупиніть поточну обробку, потім повторно оберіть поле на сфері."); return; }
     setMode("series"); setPlace("custom"); setRa(String(target.ra)); setDec(String(target.dec));
     setStart(target.start); setEnd(target.end); setDetector(String(target.detector));
     setRelease(target.release); setSurvey(target.survey); setFov("0.12");
-    setTargetName(""); setResolvedTarget(null); setEphemeris(null);
+    setTargetName(""); setResolvedTarget(null); setEphemeris(null); clearMotion();
     setWavelengthMin(""); setWavelengthMax(""); setResult(null); setError(""); setSelection(""); setExcluded([]);
   }, prepareAt: target => { void prepareAt(target); } }));
   return <Dialog open={open} onOpenChange={value=>{if(progress?.stage==="save")return;if(value){onOpen();void refreshCheckpoints();}else{stop();setProgress(null);}setOpen(value);}}>
@@ -268,8 +308,10 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
             <button type="button" className={`place-card ${place==="custom"?"selected":""}`} aria-pressed={place==="custom"} disabled={busy||resolving} onClick={()=>choosePlace("custom")}><strong>{t("Мої координати")}</strong><small>Введіть ICRS RA та Dec у градусах</small></button>
             <button type="button" className={place==="moving"?"place-card selected":"place-card"} aria-pressed={place==="moving"} disabled={busy||resolving} onClick={()=>choosePlace("moving")}><strong>{t("Рухома ціль")}</strong><small>IRSA MOST або Horizons</small></button>
           </div>
-          <div className="resolve-name"><label htmlFor="target-name">{t("Або введіть назву об’єкта")}</label><div className="resolve-controls"><Input id="target-name" value={targetName} onChange={e=>{const value=e.target.value;setTargetName(value);setResolvedTarget(null);setError("");if(value){setPlace("custom");setRa("");setDec("");}}} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();void resolveTarget();}}} disabled={busy||resolving} placeholder="Напр. M101 або NGC 6822"/><button className="button resolve-button" type="button" onClick={resolveTarget} disabled={busy||resolving||!targetName.trim()}>{resolving?<LoaderCircle className="animate-spin" size={15}/>:<Search size={15}/>} {resolving?"Шукаємо…":"Знайти координати"}</button></div><small>Назви позасонячних об’єктів шукаються через каталоги SIMBAD/NED. Для рухомих тіл та зір із власним рухом потрібні координати, перенесені на дату спостереження.</small>{resolvedTarget&&<div className="resolved-target" role="status"><strong>{resolvedTarget.canonical_name}</strong><span>RA {resolvedTarget.ra.toFixed(6)}° · Dec {resolvedTarget.dec.toFixed(6)}°</span><small>{resolvedTarget.resolver} · {resolvedTarget.service}{resolvedTarget.reference_position?` · ref. ${resolvedTarget.reference_position}`:""}. Каталожні координати; власний рух не поширено на епоху кадру. Це не виявлення SPHEREx.</small></div>}</div>
+          <div className="resolve-name"><label htmlFor="target-name">{t("Або введіть назву об’єкта")}</label><div className="resolve-controls"><Input id="target-name" value={targetName} onChange={e=>{const value=e.target.value;setTargetName(value);setResolvedTarget(null);setError("");if(value){setPlace("custom");setRa("");setDec("");}}} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();void resolveTarget();}}} disabled={busy||resolving} placeholder="Напр. M101 або NGC 6822"/><button className="button resolve-button" type="button" onClick={resolveTarget} disabled={busy||resolving||!targetName.trim()}>{resolving?<LoaderCircle className="animate-spin" size={15}/>:<Search size={15}/>} {resolving?"Шукаємо…":"Знайти координати"}</button></div><small>Назви позасонячних об’єктів шукаються через каталоги SIMBAD/NED. Для зір SIMBAD власний рух підставляється автоматично; для рухомих тіл Сонячної системи оберіть «Рухома ціль».</small>{resolvedTarget&&<div className="resolved-target" role="status"><strong>{resolvedTarget.canonical_name}</strong><span>RA {resolvedTarget.ra.toFixed(6)}° · Dec {resolvedTarget.dec.toFixed(6)}°</span><small>{resolvedTarget.resolver} · {resolvedTarget.service}{resolvedTarget.reference_position?` · ref. ${resolvedTarget.reference_position}`:""}. {resolvedTarget.proper_motion?t("Каталожні координати епохи J2000 і власний рух SIMBAD; позиція поширюється на час кожного кадру."):t("Каталожні координати; служба не повернула власного руху.")} {t("Це не виявлення SPHEREx.")}</small></div>}</div>
           <div className="coordinate-fields"><label><span>RA <small>пряме піднесення · 0–360°</small></span><Input name="ra" type="number" step="any" min="0" max="359.999999999" value={ra} onChange={e=>{setRa(e.target.value);setPlace("custom");setResolvedTarget(null);setTargetName("");}} required={place!=="moving"} disabled={busy||resolving||place==="moving"} placeholder="Напр. 167.2"/></label><label><span>Dec <small>схилення · −90–+90°</small></span><Input name="dec" type="number" step="any" min="-90" max="90" value={dec} onChange={e=>{setDec(e.target.value);setPlace("custom");setResolvedTarget(null);setTargetName("");}} required={place!=="moving"} disabled={busy||resolving||place==="moving"} placeholder="Напр. +5.15"/></label></div>
+          <div className="coordinate-fields motion-fields"><label><span>μα·cos δ <small>{t("власний рух · мас/рік")}</small></span><Input type="number" step="any" value={pmRa} onChange={e=>setPmRa(e.target.value)} disabled={busy||resolving||place==="moving"} placeholder={t("необов’язково")}/></label><label><span>μδ <small>{t("власний рух · мас/рік")}</small></span><Input type="number" step="any" value={pmDec} onChange={e=>setPmDec(e.target.value)} disabled={busy||resolving||place==="moving"} placeholder={t("необов’язково")}/></label><label><span>{t("Епоха")} <small>{t("юліанський рік координат")}</small></span><Input type="number" step="any" min="1900" max="2100" value={pmEpoch} onChange={e=>setPmEpoch(e.target.value)} disabled={busy||resolving||place==="moving"}/></label></div>
+          {motionPreview&&<p className="motion-preview" role="status">{t("Власний рух застосовано")}: {start} → RA {motionPreview.now.ra.toFixed(6)}°, Dec {motionPreview.now.dec.toFixed(6)}° · {t("зсув від епохи")} J{pmEpoch}: {motionPreview.shift.toFixed(1)}″. {t("Кожен кадр центрується на позиції, поширеній до його DATE-AVG; паралакс не враховано.")}</p>}
         </section>
         {place==="moving"&&<div className="ephemeris-import">
           <div className="motion-mode-switch" role="group" aria-label="Джерело орбіти рухомої цілі"><button type="button" className={motionMode==="most"?"selected":""} disabled={busy||resolving} aria-pressed={motionMode==="most"} onClick={()=>{setMotionMode("most");setError("");}}>IRSA MOST · відомий об’єкт</button><button type="button" className={motionMode==="horizons"?"selected":""} disabled={busy||resolving} aria-pressed={motionMode==="horizons"} onClick={()=>{setMotionMode("horizons");setError("");}}>Імпорт ефемериди Horizons</button></div>

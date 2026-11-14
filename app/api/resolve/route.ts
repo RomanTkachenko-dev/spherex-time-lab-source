@@ -1,8 +1,4 @@
-function xmlValue(block: string, tag: string): string | null {
-  const match = block.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, "i"));
-  if (!match) return null;
-  return match[1].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").trim();
-}
+import { parseSesameXml, sesameUrl } from "@/lib/sesame";
 
 export async function GET(request: Request) {
   const name = new URL(request.url).searchParams.get("name")?.trim() ?? "";
@@ -10,8 +6,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "Введіть назву астрономічного об’єкта (до 128 символів)." }, { status: 400 });
   }
 
-  const source = new URL("https://cds.unistra.fr/cgi-bin/nph-sesame/-oxp/SN");
-  source.search = encodeURIComponent(name).replace(/%20/g, "+");
+  const source = sesameUrl(name);
   try {
     const response = await fetch(source, { signal: AbortSignal.timeout(10000), headers: { Accept: "application/xml, text/xml" } });
     const declaredLength = Number(response.headers.get("Content-Length"));
@@ -20,24 +15,14 @@ export async function GET(request: Request) {
     }
     const xml = await response.text();
     if (xml.length > 128_000) return Response.json({ error: "Відповідь служби назв перевищує ліміт." }, { status: 502 });
-    const blocks = [...xml.matchAll(/<Resolver\b([^>]*)>([\s\S]*?)<\/Resolver>/gi)];
-    for (const block of blocks) {
-      const rawRa = xmlValue(block[2], "jradeg");
-      const rawDec = xmlValue(block[2], "jdedeg");
-      if (!rawRa || !rawDec) continue;
-      const ra = Number(rawRa);
-      const dec = Number(rawDec);
-      if (!Number.isFinite(ra) || ra < 0 || ra >= 360 || !Number.isFinite(dec) || dec < -90 || dec > 90) continue;
-      const resolver = block[1].match(/\bname\s*=\s*["']([^"']+)["']/i)?.[1];
+    const target = parseSesameXml(xml, name);
+    if (target) {
       return Response.json({
         query_name: name,
-        canonical_name: xmlValue(block[2], "oname") || xmlValue(block[2], "name") || name,
-        ra, dec,
-        object_type: xmlValue(block[2], "otype"),
-        reference_position: xmlValue(block[2], "refPos"),
-        resolver: resolver?.replace(/&amp;/g, "&") ?? "CDS Sesame",
-        resolver_url: source.toString(),
+        ...target,
+        resolver_url: source,
         service: "CDS Sesame",
+        retrieved_at: new Date().toISOString(),
       }, { headers: { "Cache-Control": "public, max-age=3600" } });
     }
     return Response.json({ error: `Не вдалося розпізнати «${name}». Перевірте написання або введіть RA та Dec вручну.` }, { status: 404 });

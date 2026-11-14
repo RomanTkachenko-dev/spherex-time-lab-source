@@ -24,7 +24,7 @@ from PIL import Image
 log.setLevel('ERROR')
 INFO_MASK = (1 << 21) | (1 << 12)
 BAD_MASK = np.uint32(0xffffffff ^ INFO_MASK)
-METHOD = 'field-viewer-0.7.0'
+METHOD = 'field-viewer-0.8.0'
 ATTRIBUTION = 'This publication makes use of data products from the Spectro-Photometer for the History of the Universe, Epoch of Reionization and Ices Explorer (SPHEREx), which is a joint project of the Jet Propulsion Laboratory and the California Institute of Technology, and is funded by the National Aeronautics and Space Administration.'
 
 def display_wcs(ra, dec, width_deg, n=256):
@@ -79,6 +79,23 @@ def spectral_at(h, x, y):
     wavelength, width = w.all_pix2world(x, y, 0)
     return (float((float(wavelength) * u.Unit(w.world_axis_units[0])).to_value(u.um)),
             float((float(width) * u.Unit(w.world_axis_units[1])).to_value(u.um)))
+
+def is_proper_motion(ephemeris):
+    return bool(ephemeris) and str(ephemeris.get('source', '')).startswith('Proper motion')
+
+def ephemeris_title(ephemeris):
+    return f"{ephemeris['target_name']} · " + ('власний рух' if is_proper_motion(ephemeris) else 'рухома ціль')
+
+def ephemeris_description(ephemeris):
+    if is_proper_motion(ephemeris):
+        r = ephemeris['reference']
+        origin = (f"{ephemeris['resolver']} ({ephemeris['source_url']}, отримано {ephemeris['retrieved_at']})"
+                  if ephemeris.get('source_url') else 'значення, введені користувачем')
+        return (f"Каталожна позиція RA {r['ra']:.7f}°, Dec {r['dec']:+.7f}° епохи J{r['epoch_jyear']:g} і власний рух "
+                f"({r['pm_ra_masyr']:+.3f}, {r['pm_dec_masyr']:+.3f}) мас/рік: {origin}. Позиція на DATE-AVG поширена сталим "
+                "власним рухом без паралаксу та променевої швидкості. Це прогноз, не вимірювання SPHEREx. ")
+    return (f"Імпортована таблиця {ephemeris['source']} ({ephemeris['source_file_name']}, SHA-256 {ephemeris['source_sha256']}); "
+            "Earth geocenter, ICRF, UTC; позиція на DATE-AVG отримана сферичною інтерполяцією. Це прогноз, не вимірювання SPHEREx. ")
 
 def ephemeris_position(ephemeris, mjd):
     points = ephemeris['points']
@@ -183,7 +200,7 @@ def process_fits(raw, record, query):
             'release': collection, 'date': header['DATE-AVG'], 'date_start': header['DATE-BEG'],
             'date_end': header['DATE-END'], 'mjd': float(header['MJD-AVG']), 'time_scale': 'UTC',
             'exposure_s': float(header['XPOSURE']), 'ra': position_ra, 'dec': position_dec,
-            'position_kind': 'user-supplied-horizons-ephemeris' if target else ('irsa-most-matched-position' if most else 'requested-sky-position'), 'measurement': None,
+            'position_kind': ('catalogue-proper-motion-propagated' if is_proper_motion(target) else 'user-supplied-horizons-ephemeris') if target else ('irsa-most-matched-position' if most else 'requested-sky-position'), 'measurement': None,
             'wavelength_um': wave, 'bandwidth_um': width,
             'spectral_calibration': 'Approximate WCS-WAVE value at requested field centre',
             'marker_sky': marker_sky, 'marker_sky_visible': sky_marker_visible, 'marker_object': marker_object,
@@ -249,11 +266,11 @@ def finalize_series(items, catalogue, excluded, runtime):
     target = q.get('target')
     ephemeris = q.get('ephemeris')
     most = q.get('most')
-    title = f"{most['target_name']} · IRSA MOST" if most else (f"{ephemeris['target_name']} · рухома ціль" if ephemeris else (f"{target['canonical_name']} · поле ICRS" if target else f"Поле {q['ra']:.4f}°, {q['dec']:+.4f}°"))
+    title = f"{most['target_name']} · IRSA MOST" if most else (ephemeris_title(ephemeris) if ephemeris else (f"{target['canonical_name']} · поле ICRS" if target else f"Поле {q['ra']:.4f}°, {q['dec']:+.4f}°"))
     most_source = (f"Пошук рухомої цілі через IRSA MOST SPHEREx; URL і SHA-256 всіх часових частин записані в observation_table_parts. "
                    if len(catalogue.get('observation_table_parts') or []) > 1 else
                    f"Пошук рухомої цілі через IRSA MOST SPHEREx ({most['source_url']}, SHA-256 {most['source_sha256']}). ") if most else ''
-    target_description = (f"{most_source}Положення кожного кадру взято з MOST ra_obj/dec_obj; відповідь не надає окремої епохи координати або її невизначеності. Це каталожний збіг, не виявлення SPHEREx. " if most else (f"Імпортована таблиця {ephemeris['source']} ({ephemeris['source_file_name']}, SHA-256 {ephemeris['source_sha256']}); Earth geocenter, ICRF, UTC; позиція на DATE-AVG отримана сферичною інтерполяцією. Це прогноз, не вимірювання SPHEREx. " if ephemeris else (f"Центр поля взято з {target['resolver']} ({target['query_name']}); це каталожні координати, не вимірювання SPHEREx. " if target else '')))
+    target_description = (f"{most_source}Положення кожного кадру взято з MOST ra_obj/dec_obj; відповідь не надає окремої епохи координати або її невизначеності. Це каталожний збіг, не виявлення SPHEREx. " if most else (ephemeris_description(ephemeris) if ephemeris else (f"Центр поля взято з {target['resolver']} ({target['query_name']}); це каталожні координати, не вимірювання SPHEREx. " if target else '')))
     return {
         'schema_version': 3, 'kind': 'field', 'title': title,
         'description': f"{target_description}SPHEREx {release_label} · D{q['detector']} · {q['start']} — {q['end']}",
@@ -278,6 +295,7 @@ def finalize_series(items, catalogue, excluded, runtime):
             'Horizons positions are user-supplied geocentric predictions interpolated on the unit sphere to FITS DATE-AVG; they are not detections and do not use the SPHEREx spacecraft location.',
             'IRSA MOST ra_obj/dec_obj values are service-reported matched positions. The response does not provide a separate coordinate epoch or uncertainty; these are not detections.',
             'Ephemeris interpolation accuracy depends on the supplied Horizons cadence and orbit solution; no position uncertainty is propagated.',
+            'Proper-motion positions are a catalogue position propagated linearly from its epoch to FITS DATE-AVG; parallax, radial velocity and catalogue uncertainties are not applied, and they are not detections.',
             'Moving-target view is re-centred at the catalogue coordinate for each exposure; fixed-sky view retains one ICRS centre and can place later target markers outside its field.',
             'WCS roundtrip is a consistency check, not an empirical astrometric accuracy measurement.',
             'No PSF or full spectral response matching; brightness differences do not establish temporal variability.',
@@ -454,11 +472,11 @@ def finish_stream(catalogue_json, frames_json, excluded_json, runtime_json, scal
     collection = f"spherex_{release}" + ("_deep" if survey == 'deep' else '')
     release_label = release.upper() + (' · Deep Survey' if survey == 'deep' else ' · Wide Survey')
     target, ephemeris, most = q.get('target'), q.get('ephemeris'), q.get('most')
-    title = f"{most['target_name']} · IRSA MOST" if most else (f"{ephemeris['target_name']} · рухома ціль" if ephemeris else (f"{target['canonical_name']} · поле ICRS" if target else f"Поле {q['ra']:.4f}°, {q['dec']:+.4f}°"))
+    title = f"{most['target_name']} · IRSA MOST" if most else (ephemeris_title(ephemeris) if ephemeris else (f"{target['canonical_name']} · поле ICRS" if target else f"Поле {q['ra']:.4f}°, {q['dec']:+.4f}°"))
     most_source = (f"Пошук рухомої цілі через IRSA MOST SPHEREx; URL і SHA-256 всіх часових частин записані в observation_table_parts. "
                    if len(catalogue.get('observation_table_parts') or []) > 1 else
                    f"Пошук рухомої цілі через IRSA MOST SPHEREx ({most['source_url']}, SHA-256 {most['source_sha256']}). ") if most else ''
-    target_description = (f"{most_source}Положення кожного кадру взято з MOST ra_obj/dec_obj; відповідь не надає окремої епохи координати або її невизначеності. Це каталожний збіг, не виявлення SPHEREx. " if most else (f"Імпортована таблиця {ephemeris['source']} ({ephemeris['source_file_name']}, SHA-256 {ephemeris['source_sha256']}); Earth geocenter, ICRF, UTC; позиція на DATE-AVG отримана сферичною інтерполяцією. Це прогноз, не вимірювання SPHEREx. " if ephemeris else (f"Центр поля взято з {target['resolver']} ({target['query_name']}); це каталожні координати, не вимірювання SPHEREx. " if target else '')))
+    target_description = (f"{most_source}Положення кожного кадру взято з MOST ra_obj/dec_obj; відповідь не надає окремої епохи координати або її невизначеності. Це каталожний збіг, не виявлення SPHEREx. " if most else (ephemeris_description(ephemeris) if ephemeris else (f"Центр поля взято з {target['resolver']} ({target['query_name']}); це каталожні координати, не вимірювання SPHEREx. " if target else '')))
     return {
         'schema_version': 4, 'kind': 'field', 'title': title,
         'description': f"{target_description}SPHEREx {release_label} · D{q['detector']} · {q['start']} — {q['end']}",
@@ -484,6 +502,7 @@ def finish_stream(catalogue_json, frames_json, excluded_json, runtime_json, scal
             'Horizons positions are user-supplied geocentric predictions interpolated on the unit sphere to FITS DATE-AVG; they are not detections and do not use the SPHEREx spacecraft location.',
             'IRSA MOST ra_obj/dec_obj values are service-reported matched positions. The response does not provide a separate coordinate epoch or uncertainty; these are not detections.',
             'Ephemeris interpolation accuracy depends on the supplied Horizons cadence and orbit solution; no position uncertainty is propagated.',
+            'Proper-motion positions are a catalogue position propagated linearly from its epoch to FITS DATE-AVG; parallax, radial velocity and catalogue uncertainties are not applied, and they are not detections.',
             'Moving-target view is re-centred at the catalogue coordinate for each exposure; fixed-sky view retains one ICRS centre and can place later target markers outside its field.',
             'WCS roundtrip is a consistency check, not an empirical astrometric accuracy measurement.',
             'No PSF or full spectral response matching; brightness differences do not establish temporal variability.',

@@ -1,7 +1,7 @@
 export type Release = "qr2" | "qr3" | "dr1";
 export type Survey = "wide" | "deep" | "most";
 export type ArchiveScope = { release: Release; survey: Survey; collection: string };
-import { summarizeTrack, type EphemerisPoint, type ImportedEphemeris } from "./ephemeris.ts";
+import { isProperMotion, summarizeTrack, validateProperMotionEphemeris, type EphemerisPoint, type ImportedEphemeris } from "./ephemeris.ts";
 import { MAX_SERIES_FRAMES } from "./catalogue-batches.ts";
 export type MostProvenance = { source: "IRSA MOST"; source_url: string; source_sha256: string; target_name: string; catalog: "spherex"; retrieved_at: string; match_count: number };
 export type FieldQuery = { ra: number; dec: number; start: string; end: string; detector: number; fov: number; max_frames: number; wavelength_min: number | null; wavelength_max: number | null; release: Release; survey: Survey; target?: { query_name: string; canonical_name: string; resolver: string; resolver_url: string; object_type: string | null; reference_position: string | null }; ephemeris?: ImportedEphemeris; most?: MostProvenance };
@@ -56,17 +56,20 @@ export function validateFieldQuery(input: unknown): FieldQuery {
       if (![mjd,pointRa,pointDec].every(Number.isFinite) || pointRa < 0 || pointRa >= 360 || pointDec < -90 || pointDec > 90 || (i > 0 && mjd <= Number((rawPoints[i-1] as Record<string, unknown>).mjd))) throw Error(`Некоректний час або координати в рядку ефемериди ${i + 1}.`);
       return { mjd, ra: pointRa, dec: pointDec };
     });
-    const target_name = typeof e.target_name === "string" ? e.target_name.trim() : "";
-    const source_file_name = typeof e.source_file_name === "string" ? e.source_file_name.trim() : "";
-    const source_sha256 = typeof e.source_sha256 === "string" ? e.source_sha256.toLowerCase() : "";
-    if (e.source !== "JPL Horizons" || e.source_url !== "https://ssd.jpl.nasa.gov/horizons/app.html" || e.observer !== "Earth geocenter" || e.frame !== "ICRF" || e.time_scale !== "UTC" || !target_name || target_name.length > 128 || !source_file_name || source_file_name.length > 128 || /[\\/\u0000-\u001f]/.test(source_file_name) || !/^[a-f0-9]{64}$/.test(source_sha256)) throw Error("Не вистачає метаданих походження таблиці Horizons.");
+    if (isProperMotion(e)) ephemeris = validateProperMotionEphemeris(e, points);
+    else {
+      const target_name = typeof e.target_name === "string" ? e.target_name.trim() : "";
+      const source_file_name = typeof e.source_file_name === "string" ? e.source_file_name.trim() : "";
+      const source_sha256 = typeof e.source_sha256 === "string" ? e.source_sha256.toLowerCase() : "";
+      if (e.source !== "JPL Horizons" || e.source_url !== "https://ssd.jpl.nasa.gov/horizons/app.html" || e.observer !== "Earth geocenter" || e.frame !== "ICRF" || e.time_scale !== "UTC" || !target_name || target_name.length > 128 || !source_file_name || source_file_name.length > 128 || /[\\/\u0000-\u001f]/.test(source_file_name) || !/^[a-f0-9]{64}$/.test(source_sha256)) throw Error("Не вистачає метаданих походження таблиці Horizons.");
+      ephemeris = { source: "JPL Horizons", source_url: "https://ssd.jpl.nasa.gov/horizons/app.html", target_name, source_file_name, source_sha256, observer: "Earth geocenter", frame: "ICRF", time_scale: "UTC", points };
+    }
     const track = summarizeTrack(points);
     const startMjd = dates[0].ms / 86400000 + 40587;
     const endMjdExclusive = dates[1].ms / 86400000 + 40588;
     if (points[0].mjd > startMjd || points.at(-1)!.mjd < endMjdExclusive) throw Error("Ефемерида має покривати весь UTC-інтервал, включно з кінцем останнього дня. Розширте час у Horizons.");
     if (track.radius_deg > fov / 2 + 1e-9) throw Error("Траєкторія виходить за межі вибраного поля. Звузьте дати або збільште поле зору.");
     ra = track.ra; dec = track.dec;
-    ephemeris = { source: "JPL Horizons", source_url: "https://ssd.jpl.nasa.gov/horizons/app.html", target_name, source_file_name, source_sha256, observer: "Earth geocenter", frame: "ICRF", time_scale: "UTC", points };
   } else {
     ra = number("ra"); dec = number("dec");
     if (ra < 0 || ra >= 360 || dec < -90 || dec > 90) throw Error("RA: від 0° до 360° виключно; Dec: від −90° до 90°.");

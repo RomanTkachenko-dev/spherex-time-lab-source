@@ -59,6 +59,32 @@ class FieldChecks(unittest.TestCase):
         self.assertGreater(frame['quality']['target_finite_pixel_count'],0)
         self.assertFalse(np.isfinite(sky).any());self.assertTrue(np.isfinite(object_sky).any())
 
+    def test_proper_motion_track_centres_the_frame_on_the_propagated_position(self):
+        data=np.zeros((64,64));data[32,40]=9
+        raw,record,query=synthetic_field(data)
+        centre=p.display_wcs(20,0,0.32,n=64)
+        star_ra,star_dec=(float(v) for v in centre.all_pix2world(40,32,0))
+        # Barnard-like motion: (-798.6, +10328) mas/yr places the J2000 position 268 arcsec south of the star.
+        j2000_dec=star_dec-10328*26/3.6e6
+        track={'source':'Proper motion (CDS Sesame)','source_url':'https://cds.unistra.fr/cgi-bin/nph-sesame/-oxp/SN?synthetic',
+            'target_name':'Synthetic star','resolver':'S=Simbad','retrieved_at':'2026-11-14T00:00:00.000Z',
+            'reference':{'ra':star_ra,'dec':j2000_dec,'pm_ra_masyr':0.0,'pm_dec_masyr':10328.0,'epoch_jyear':2000},
+            'points':[{'mjd':61022.0,'ra':star_ra,'dec':star_dec-10328/365.25/3.6e6},{'mjd':61024.0,'ra':star_ra,'dec':star_dec+10328/365.25/3.6e6}]}
+        with patch.object(p,'spectral_at',return_value=(1.2,0.02)):
+            fixed,_=p.process_fits(raw,{**record},{**query,'ra':star_ra,'dec':j2000_dec})
+            moving,reason=p.process_fits(raw,{**record},{**query,'ra':star_ra,'dec':star_dec,'ephemeris':track})
+        self.assertIsNone(reason)
+        self.assertFalse(np.nanmax(fixed[1])>1,'a 0.03 degree field at the J2000 position misses the star')
+        frame,sky,object_sky,*_=moving
+        self.assertEqual(frame['position_kind'],'catalogue-proper-motion-propagated')
+        self.assertLess(abs(frame['dec']-star_dec)*3600,1e-6)
+        y,x=np.unravel_index(np.nanargmax(object_sky),object_sky.shape)
+        self.assertLessEqual(abs(x-127.5),1);self.assertLessEqual(abs(y-127.5),1)
+        self.assertLessEqual(abs(frame['marker_object']['x']-127.5),1e-6)
+        self.assertTrue(p.is_proper_motion(track));self.assertFalse(p.is_proper_motion({'source':'JPL Horizons'}))
+        self.assertIn('власний рух',p.ephemeris_title(track));self.assertIn('J2000',p.ephemeris_description(track))
+        self.assertIn('користувачем',p.ephemeris_description({**track,'source':'Proper motion (user-supplied)','source_url':None}))
+
     def test_missing_data_texture_differs_from_finite_zero_signal(self):
         data=np.zeros((16,16));data[:8,:]=np.nan
         gray=p.display_gray(data,0,10)

@@ -9,6 +9,7 @@ import { cubeMetadata, cubeRenderFrequency, SPHEREX_HIPS, DSS_HIPS } from "@/lib
 import { readAtlasLink, parseSkyCoordinates, parseSkyFootprint, skyObservationDate, type SkyObservation, type SkySearchTarget } from "@/lib/sky-atlas";
 import { collectCatalogueParts, MAX_CATALOGUE_CHUNK_FRAMES } from "@/lib/catalogue-batches";
 import { validateFieldQuery } from "@/lib/field-query";
+import { propagateProperMotion } from "@/lib/ephemeris";
 import { frameTimeFraction, nearestFrameIndexAtFraction, type Manifest } from "@/lib/science";
 import "./sky-atlas.css";
 
@@ -116,10 +117,14 @@ export default function SkyAtlas({ manifest, onSearch, onCurrentSeries, link, la
     setNameBusy(true); setError("");
     try {
       const response = await fetch(apiUrl(`/api/resolve?name=${encodeURIComponent(target.trim())}`), { signal: controller.signal });
-      const body = await response.json() as { ra: number; dec: number; error?: string };
+      const body = await response.json() as { ra: number; dec: number; error?: string; proper_motion?: { pm_ra_masyr: number; pm_dec_masyr: number; epoch_jyear: number } | null };
       if (!response.ok) throw Error(body.error || "Назву не знайдено.");
       if (!parseSkyCoordinates(`${body.ra} ${body.dec}`)) throw Error("Служба повернула некоректні координати.");
-      if (!controller.signal.aborted) goto(body.ra, body.dec, 8);
+      // Catalogue positions are J2000: move high proper-motion stars to the first search date.
+      const mjd = Date.parse(start + "T00:00:00Z") / 86400000 + 40587, motion = body.proper_motion;
+      const now = motion && Number.isFinite(mjd) && [motion.pm_ra_masyr, motion.pm_dec_masyr, motion.epoch_jyear].every(Number.isFinite)
+        ? propagateProperMotion({ ra: body.ra, dec: body.dec, ...motion }, mjd) : body;
+      if (!controller.signal.aborted) goto(now.ra, now.dec, 8);
     } catch (e) { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Не вдалося знайти об’єкт."); }
     finally { if (!controller.signal.aborted) setNameBusy(false); }
   }
