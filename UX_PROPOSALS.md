@@ -27,6 +27,15 @@ Risk to logic: none / low / needs logic (touches frozen science, API or data cod
 | 11 | B | On the Pages demo the search button is disabled with no explanation | Hint under the button: archive search needs the full (server) version | S | none | ✅ |
 | 12 | A | "Science laboratory" looks like a required step | Renamed "Science lab (advanced)", with an open/closed chevron | S | none | ✅ |
 
+### Follow-up round
+
+| # | Persona | Problem | Change | Effort | Risk | Status |
+|---|---|---|---|---|---|---|
+| 13 | A, B | Only 7 thumbnails were visible; the rest of the series felt missing | Scrollable strip with **all** exposures, virtualised for large series, pause markers, selected exposure kept in view | M | none | ✅ |
+| 14 | A | "What is that dot?": the wide globe and the 256-px exposures were two unrelated maps | **Globe ↔ viewer link**: the globe centre is a cyan cross on the images; clicking an image moves the globe there (switch to DSS2 to compare visible light); "Show on the globe ↑" | M | none (display-only projection, tested against pipeline markers) | ✅ |
+
+**Who the link is for:** someone who sees a blob or a moving dot in the SPHEREx exposures and wants to know what it is. They click it, the globe flies there, and they can compare the infrared mosaic with the DSS2 visible-light survey or search by name around it. In the other direction, someone who found a named star or galaxy on the globe sees exactly where it falls in the exposures. **Limits:** fixed-sky view only; the background mosaic combines many dates, so a moving object will not appear at the same place on the globe.
+
 ## Proposals (not implemented)
 
 | # | Persona | Problem | Change | Effort | Risk |

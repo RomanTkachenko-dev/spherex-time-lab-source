@@ -24,6 +24,10 @@ usual >500 kB chunk warning.
 | R4 `<html lang>` | ✅ | `ui-fix` |
 | T9 series titles | ✅ translated at display time | i18n commit |
 | U1–U4 newcomer wording | ✅ see UX_PROPOSALS.md | `ux:` + i18n commits |
+| B11 green atlas buttons unreadable on hover (`.button:hover` overrode the fill) | ✅ fixed | `ui-fix: keep the green atlas buttons readable …` |
+| B12 exposure strip showed only 7 exposures around the current one | ✅ all exposures, virtualised | `ui: show every exposure …` |
+| B13 strip thumbnails blank in the Pages build (missing base path) | ✅ fixed | `ui: show every exposure …` |
+| B14 official NASA acknowledgement untranslated in the method dialog | ✅ kept verbatim + Ukrainian label and translation | `i18n: label and translate the official SPHEREx acknowledgement …` |
 | N1–N4 | ⏸ needs logic change, not done | — |
 
 Check: `git grep -nP '"[^"]*[А-Яа-яІіЇїЄєҐґ][^"]*"' -- app` lists only `app/api/**` (frozen, translated at display) and the
