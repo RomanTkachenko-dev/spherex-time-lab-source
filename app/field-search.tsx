@@ -67,6 +67,15 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
       const assembled=assembleCatalogueParts(parts,{start:target.start,end:target.end},false);
       const body={...assembled,query:assembled.query as FieldQuery};
       if(body.records.length<2)throw Error('Для порівняння потрібні принаймні дві експозиції.');
+      const pair = target.comparisonUrls?.map(url => body.records.find(record => record.url === url));
+      if (pair) {
+        if (!pair[0] || !pair[1] || pair[0].url === pair[1].url) {
+          throw Error("Вибрану пару не знайдено в каталозі. Виберіть експозиції ще раз.");
+        }
+        body.records = [pair[0], pair[1]].sort((a, b) => a.mjd - b.mjd);
+        body.candidate_count = 2;
+        body.selection = "Selected pair only. Shared display scale computed from these two exposures.";
+      }
       setSelection(`${target.release.toUpperCase()} · D${target.detector} · ${body.records.length} експозицій · RA ${target.ra.toFixed(5)}°, Dec ${target.dec.toFixed(5)}°`);
       startWorker(currentJob,crypto.randomUUID(),body);
     } catch(e) { if(currentJob===job.current){stop();setProgress(null);setError(e instanceof Error?e.message:String(e));} }
@@ -93,7 +102,9 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
         setProgress({stage:"save",completed:0,total:0,detail:"Збереження готової дослідницької сесії…"});
         try {
           const manifest=validateManifest(data.manifest);
-          await onPrepared(manifest, requestedComparison.current);
+          const pairOnly = manifest.completeness?.selection.startsWith("Selected pair only.");
+          await onPrepared(manifest, requestedComparison.current ?? (pairOnly
+            ? [manifest.frames[0].source_url, manifest.frames[1].source_url] : undefined));
           requestedComparison.current = undefined;
           await completeProcessingCheckpoint(id);
           setProgress(null);setOpen(false);
