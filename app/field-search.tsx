@@ -1,4 +1,5 @@
 "use client";
+import { apiUrl, apiOrigin, publicAsset } from "@/lib/site-mode";
 import { useEffect, useImperativeHandle, useRef, useState, type FormEvent, type Ref } from "react";
 import type { SkySearchTarget } from "@/lib/sky-atlas";
 import { ArrowUpRight, LoaderCircle, Search, X } from "lucide-react";
@@ -58,7 +59,7 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
       const {parts} = await collectCatalogueParts<ArchiveRecord,ArchiveResponse>({
         interval:{start:target.start,end:target.end},movingObject:false,
         request:async interval => {
-          const response = await fetch('/api/field',{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,body:JSON.stringify({...query,...interval})});
+          const response = await fetch(apiUrl('/api/field'),{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,body:JSON.stringify({...query,...interval})});
           return {status:response.status,ok:response.ok,body:await response.json() as ArchiveResponse};
         },onProgress:value=>setProgress({stage:'catalogue',...value}),
       });
@@ -82,7 +83,7 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
     timeout.current=setTimeout(()=>{stop();void refreshCheckpoints();setError("Обчислення довго не відповідає. Останню контрольну точку збережено; його можна продовжити зі списку нижче.");},180000);
   }
   function startWorker(currentJob: number, id: string, catalogue?: ArchiveResult) {
-    const w=new Worker("/science/field-worker.mjs",{type:"module"});worker.current=w;assetSeries.current=id;armTimeout();
+    const w=new Worker(publicAsset("/science/field-worker.mjs"),{type:"module"});worker.current=w;assetSeries.current=id;armTimeout();
     w.onmessage=async({data})=>{
       if(currentJob!==job.current)return;
       armTimeout();
@@ -105,7 +106,7 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
       }
     };
     w.onerror=()=>{if(currentJob!==job.current)return;stop();void refreshCheckpoints();setError("Обчислювальний модуль зупинився. Збережену контрольну точку можна продовжити.");};
-    w.postMessage(catalogue?{type:"build",catalogue,assetSeriesId:id}:{type:"resume",assetSeriesId:id});
+    w.postMessage(catalogue?{type:"build",catalogue,assetSeriesId:id,apiOrigin}:{type:"resume",assetSeriesId:id,apiOrigin});
   }
   function resumeCheckpoint(checkpoint: ProcessingCheckpointSummary) {
     if(busy||resolving)return;
@@ -159,7 +160,7 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
     if (!name) { setError("Введіть назву об’єкта для пошуку координат."); return; }
     setResolving(true); setError(""); setResolvedTarget(null);
     try {
-      const response = await fetch(`/api/resolve?name=${encodeURIComponent(name)}`, { signal: AbortSignal.timeout(12000) });
+      const response = await fetch(apiUrl(`/api/resolve?name=${encodeURIComponent(name)}`), { signal: AbortSignal.timeout(12000) });
       const body = await response.json() as ResolvedTarget & { error?: string };
       if (!response.ok) throw Error(body.error || "Не вдалося розпізнати назву.");
       if (!Number.isFinite(body.ra) || !Number.isFinite(body.dec) || body.ra < 0 || body.ra >= 360 || body.dec < -90 || body.dec > 90) throw Error("Служба повернула некоректні координати.");
@@ -209,7 +210,7 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
           interval: { start: String(payload.start), end: String(payload.end) }, movingObject: mostSearch,
           request: async interval => {
             const requestPayload = { ...payload, ...interval, max_frames: MAX_CATALOGUE_CHUNK_FRAMES, ...(mostSearch ? { allow_sparse: true } : {}) };
-            const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(requestPayload), signal: controller.signal });
+            const response = await fetch(apiUrl(endpoint), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(requestPayload), signal: controller.signal });
             return { status: response.status, ok: response.ok, body: await response.json() as ArchiveResponse };
           },
           onProgress: value => setProgress({ stage: "catalogue", ...value }),
@@ -217,7 +218,7 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
         const assembled = assembleCatalogueParts(fetched, { start: String(payload.start), end: String(payload.end) }, mostSearch);
         body = { ...assembled, query: assembled.query as FieldQuery };
       } else {
-        const response = await fetch(endpoint,{method:"GET",signal:controller.signal});
+        const response = await fetch(apiUrl(endpoint),{method:"GET",signal:controller.signal});
         const listBody = await response.json() as ArchiveResponse;
         if(!response.ok)throw Error(listBody.error||"Запит не виконано.");
         body = listBody as ArchiveResult;

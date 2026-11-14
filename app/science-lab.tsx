@@ -1,9 +1,10 @@
 "use client";
+import { apiUrl, apiOrigin, publicAsset } from "@/lib/site-mode";
 import {useEffect,useRef,useState} from 'react';
 import type {Manifest} from '@/lib/science';
 import {allDetectorRecords,currentLabRecords,labOptions,measurementsCsv,type LabFrame,type LabOptions,type LabReport} from '@/lib/laboratory';
 import {readLatestLab,saveLabAssociations} from '@/lib/lab-storage';
-import {associateCandidates,candidateCone} from '@/lib/candidate-matches';
+import {associateTrackCones} from '@/lib/candidate-matches';
 import type {GaiaReference} from '@/lib/gaia';
 import './science-lab.css';
 
@@ -34,17 +35,19 @@ export default function ScienceLab({manifest,onFrame}:{manifest:Manifest;onFrame
   const worker=useRef<Worker|null>(null),request=useRef<AbortController|null>(null),mounted=useRef(true);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;worker.current?.terminate();request.current?.abort();};},[]);
   useEffect(()=>{
-    if(!report||report.catalogue_crossmatch||!report.tracks.length||busy)return;
+    if(!report||report.catalogue_crossmatch?.per_track||!report.tracks.length||busy)return;
     const controller=new AbortController();const current=report;
     (async()=>{
       await Promise.resolve();if(controller.signal.aborted)return;
       setMatching(true);setMatchError('');
-      const cone=candidateCone(current);if(!cone)return;
-      const response=await fetch(`/api/gaia?ra=${cone.ra}&dec=${cone.dec}&radius=${cone.radius}`,{signal:controller.signal});
+      const result = await associateTrackCones(current, async cone => {
+      const response=await fetch(apiUrl(`/api/gaia?ra=${cone.ra}&dec=${cone.dec}&radius=${cone.radius}`),{signal:controller.signal});
       const catalogue=await response.json() as GaiaReference&{error?:string};
       if(!response.ok)throw Error(catalogue.error||'Gaia DR3 недоступний.');
+        return catalogue;
+      }, controller.signal);
       if(controller.signal.aborted)return;
-      const enriched={...current,catalogue_crossmatch:associateCandidates(current,catalogue)};
+      const enriched={...current,catalogue_crossmatch:result};
       await saveLabAssociations(enriched);
       if(!controller.signal.aborted){setMatching(false);setReport(enriched);}
     })().catch(e=>{if(!controller.signal.aborted)setMatchError(e instanceof Error?e.message:String(e));})
@@ -66,7 +69,7 @@ export default function ScienceLab({manifest,onFrame}:{manifest:Manifest;onFrame
         if(!records.length)throw Error('За цими датами немає кадрів для аналізу.');
       }
       if(request.current.signal.aborted||!mounted.current)return;
-      const w=new Worker('/science/lab-worker.mjs',{type:'module'});worker.current=w;
+      const w=new Worker(publicAsset('/science/lab-worker.mjs'),{type:'module'});worker.current=w;
       w.onmessage=event=>{
         if(!mounted.current||worker.current!==w)return;
         const message=event.data;
@@ -75,7 +78,7 @@ export default function ScienceLab({manifest,onFrame}:{manifest:Manifest;onFrame
         if(message.type==='error'){setError(message.message);setBusy(false);setResumeAvailable(true);w.terminate();worker.current=null;}
       };
       w.onerror=e=>{setError(e.message||'Збій наукового середовища.');setBusy(false);setResumeAvailable(true);w.terminate();worker.current=null;};
-      w.postMessage({resume,options:opts,records,catalogue});
+      w.postMessage({resume,options:opts,records,catalogue,apiOrigin});
     }catch(e){if(mounted.current){setError(e instanceof Error?e.message:String(e));setBusy(false);}}
   }
   const active=report?.channels.find(c=>c.channel===channel);
@@ -97,7 +100,7 @@ export default function ScienceLab({manifest,onFrame}:{manifest:Manifest;onFrame
         <label><input type="checkbox" checked={options.fit_position} onChange={e=>setOptions(p=>({...p,fit_position:e.target.checked}))}/> Підганяти центр джерела (інакше фіксована позиція)</label>
         <label><input type="checkbox" checked={options.detect} onChange={e=>setOptions(p=>({...p,detect:e.target.checked}))}/> Виявляти піки та зв’язувати кандидати у траєкторії</label>
         {numeric('response_tolerance','Допуск різниці нормованих відгуків (0–0,5)',0,.5,.01)}
-        {options.detect&&<>{numeric('snr','Поріг сигнал/шум',3,100,.5)}{numeric('max_sources','Ліміт піків на кадр (перевищення дає помилку)',1,200,1)}{numeric('radius_arcsec','Допуск траєкторії · кутові секунди',.1,30,.1)}{numeric('max_speed_arcsec_day','Максимальна швидкість · ″/добу',.1,100000,1)}{numeric('max_gap_days','Максимальна тривалість траєкторії · доби',.001,365,.1)}</>}
+        {options.detect&&<>{numeric('snr','Поріг сигнал/шум',3,100,.5)}{numeric('max_sources','Ліміт підгонок піків на кадр',1,200,1)}{numeric('radius_arcsec','Допуск траєкторії · кутові секунди',.1,30,.1)}{numeric('max_speed_arcsec_day','Максимальна швидкість · ″/добу',.1,100000,1)}{numeric('max_gap_days','Максимальна тривалість траєкторії · доби',.001,365,.1)}</>}
       </div><p>{all?'Буде виконано окремий повний пошук кожного детектора.':'Аналіз поточної серії: '+manifest.frames.length+' кадрів.'} Порожні спектральні канали залишаться порожніми. Калібрації завантажуються за потреби й можуть бути об’ємними.</p></fieldset>
       <div className="lab-actions"><button disabled={busy} onClick={()=>void start()}>Почати новий аналіз</button><button disabled={busy||!resumeAvailable} onClick={()=>void start(true)}>Продовжити збережений</button>{busy&&<button onClick={stop}>Пауза</button>}<button disabled={busy} onClick={()=>void restore()}>Відкрити останній звіт</button></div>
       <p role="status" aria-live="polite">{status}</p>{error&&<p className="lab-error" role="alert">{error}</p>}
@@ -114,10 +117,11 @@ export default function ScienceLab({manifest,onFrame}:{manifest:Manifest;onFrame
         {picked?.target&&<div className="lab-picked"><strong>{picked.id}</strong><p>{picked.date} UTC · {picked.target.wavelength_um.toFixed(5)} мкм</p><p>Потік: {picked.target.flux_uJy.toPrecision(5)} ± {picked.target.flux_error_uJy.toPrecision(3)} мкЯн · S/N {picked.target.snr.toFixed(2)} · χ²/ν {picked.target.reduced_chi2.toFixed(2)}</p><p>RA {picked.target.ra.toFixed(7)}°, Dec {picked.target.dec.toFixed(7)}°. {picked.target.centroid_fitted?'Центр виміряно.':'Позицію зафіксовано, а не виміряно.'}</p>{picked.target.position_covariance_arcsec2&&<p>Умовні похибки центра E/N: {Math.sqrt(picked.target.position_covariance_arcsec2[0][0]).toFixed(3)}″ / {Math.sqrt(picked.target.position_covariance_arcsec2[1][1]).toFixed(3)}″.</p>}</div>}
         <h3>Кандидати та траєкторії</h3><p>{report.frames.reduce((s,f)=>s+f.detections.length,0)} детекцій · {report.tracks.length} траєкторій. Порядок: кількість незалежних часових точок, залишки моделі, часовий інтервал. Відсутність каталожного зіставлення не означає новий об’єкт; орбіти не обчислюються.</p>
         {report.options.detect&&report.frames.some(f=>f.detection_error)&&<details open><summary>Пошук кандидатів завершено не в усіх кадрах</summary><p>Помилка детектора не означає відсутності джерел. Траєкторії побудовано лише за доступними детекціями.</p>{report.frames.filter(f=>f.detection_error).map(f=><p key={f.id}>{f.id}: {f.detection_error}</p>)}</details>}
+        {report.options.detect && report.frames.some(f=>f.detection_diagnostics?.skipped_peaks) && <p role="status">Для частини кадрів оброблено лише найсильніші піки. Пропущено {report.frames.reduce((sum,f)=>sum+(f.detection_diagnostics?.skipped_peaks??0),0)} піків. Повнота пошуку обмежена.</p>}
         {matching&&<p role="status">Автоматично зіставляємо траєкторії з Gaia DR3 на епохи експозицій…</p>}
         {matchError&&<p role="alert">Каталожне зіставлення не завершене: {matchError} <button onClick={()=>setMatchAttempt(v=>v+1)}>Повторити</button></p>}
         {report.catalogue_crossmatch&&<div className="lab-picked"><h4>Зіставлення з Gaia DR3</h4><p>Радіус {report.catalogue_crossmatch.radius_arcsec}″ на кожній епосі. Можлива позиційна відповідність не є підтвердженою ідентифікацією. Відсутність відповідності не означає новий об’єкт; каталог малих тіл тут не перевіряється.</p>
-          {report.catalogue_crossmatch.catalogue.truncated&&<p role="alert">Вибірку Gaia обрізано лімітом сервісу. Результати позначено неповними.</p>}
+          {report.catalogue_crossmatch.tracks.some(t=>t.status==="incomplete")&&<p role="alert">Для частини траєкторій перевірка неповна. Джерела й причини збережені у звіті.</p>}
           <div className="lab-table"><table><thead><tr><th>Траєкторія</th><th>Результат</th><th>Gaia source_id · RMS</th></tr></thead><tbody>{report.catalogue_crossmatch.tracks.map(t=><tr key={t.track}><td>{t.track+1}</td><td>{{'possible-association':'Можлива відповідність','ambiguous':'Кілька відповідностей','no-association':'Немає відповідності у вибірці','incomplete':'Неповна перевірка'}[t.status]}</td><td>{t.candidates.length?t.candidates.map(c=><div key={c.source_id}>{c.source_id} · {c.rms_arcsec.toFixed(3)}″ · {c.epochs} епох{!c.motion_applied?' · власний рух невідомий':''}</div>):'—'}</td></tr>)}</tbody></table></div>
           <a href={report.catalogue_crossmatch.catalogue.source_url} target="_blank" rel="noreferrer">Вихідний запит Gaia DR3 ↗</a><p>Каталог, час отримання, контрольна сума й усі відстані збережені в JSON-звіті. Перенесення позицій враховує власний рух, без паралаксу.</p></div>}
         {!report.options.detect&&<p>Для цього звіту пошук кандидатів не запускався. Увімкніть його в параметрах нового аналізу.</p>}

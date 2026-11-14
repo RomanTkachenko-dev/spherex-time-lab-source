@@ -1,3 +1,5 @@
+let apiOrigin = "";
+const scienceAsset = path => self.location ? new URL(path, self.location.href).href : "/science/" + path;
 import { labStore } from './lab-storage.mjs';
 const RUNTIME = 'https://cdn.jsdelivr.net/pyodide/v314.0.7/full/';
 const hash = async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -16,9 +18,9 @@ async function get(url) {
   throw error;
 }
 async function run(message) {
-  const source=await (await get('/science/lab_pipeline.py')).text();
+  const source=await (await get(scienceAsset('lab_pipeline.py'))).text();
   const codeHash=await hash(new TextEncoder().encode(source));
-  const calibration=await (await get('/science/calibration/manifest.json')).json();
+  const calibration=await (await get(scienceAsset('calibration/manifest.json'))).json();
   let state=message.resume?await labStore('get'):null;
   if(message.resume&&!state)throw Error('Немає збереженого обчислення.');
   if(state&&(state.code_sha256!==codeHash||JSON.stringify(state.calibration)!==JSON.stringify(calibration)))throw Error('Метод або калібрація змінились. Почніть новий аналіз.');
@@ -34,7 +36,7 @@ async function run(message) {
     if(loaded.has(detector))return;
     const spec=calibration.detectors[String(detector)];
     if(!spec)throw Error('Відсутня калібрація детектора.');
-    const raw=new Uint8Array(await (await get('/science/calibration/'+spec.file)).arrayBuffer());
+    const raw=new Uint8Array(await (await get(scienceAsset('calibration/'+spec.file))).arrayBuffer());
     if(await hash(raw)!==spec.sha256)throw Error('Контрольна сума калібрації не збігається.');
     py.globals.set('cal_raw',raw);py.globals.set('cal_detector',detector);
     await py.runPythonAsync('load_calibration(cal_detector,bytes(cal_raw)); del cal_raw');
@@ -48,14 +50,14 @@ async function run(message) {
     progress(`FITS ${i+1} / ${state.records.length} · D${record.detector}`);
     await loadDetector(record.detector);
     const params=new URLSearchParams({url:record.url,ra:String(record.cutout_ra),dec:String(record.cutout_dec),fov:String(record.fov),release:record.release.includes('dr1')?'dr1':record.release.includes('qr3')?'qr3':'qr2'});
-    const response=await get('/api/cutout?'+params);
+    const response=await get(apiOrigin+'/api/cutout?'+params);
     const raw=new Uint8Array(await response.arrayBuffer());
     py.globals.set('raw',raw);py.globals.set('record_json',JSON.stringify(record));
     const tileKeys=JSON.parse(await py.runPythonAsync('TILES.clear(); json.dumps(required_tiles(bytes(raw)))'));
     for(const key of tileKeys){
       const spec=calibration.detectors[String(record.detector)].tiles[key];
       if(!spec)throw Error('Відсутня спектральна карта.');
-      const data=new Uint8Array(await (await get('/science/calibration/'+spec.file)).arrayBuffer());
+      const data=new Uint8Array(await (await get(scienceAsset('calibration/'+spec.file))).arrayBuffer());
       if(await hash(data)!==spec.sha256)throw Error('Контрольна сума спектральної карти не збігається.');
       py.globals.set('tile_raw',data);py.globals.set('tile_key',record.detector+':'+key);
       await py.runPythonAsync('load_tile(tile_key,bytes(tile_raw)); del tile_raw');
@@ -81,6 +83,7 @@ async function run(message) {
   self.postMessage({type:'complete',report});
 }
 self.onmessage=async event=>{
+  apiOrigin = event.data.apiOrigin || "";
   try {
     if(navigator.locks)await navigator.locks.request('spherex-lab-run',{ifAvailable:true},async lock=>{if(!lock)throw Error('Лабораторія вже працює в іншій вкладці.');await run(event.data);});
     else throw Error('Для збереження аналізу потрібен браузер із Web Locks.');

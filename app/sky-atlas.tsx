@@ -1,5 +1,5 @@
 "use client";
-import { staticPages } from "@/lib/site-mode";
+import { apiUrl, liveArchive } from "@/lib/site-mode";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Globe2, Search, Crosshair, Plus, Minus, Pause, Play, ArrowDown, LoaderCircle } from "lucide-react";
 import { loadAladin, type AladinApi, type SkyOverlay, type SkyViewer, type SkyImage } from "@/lib/aladin";
@@ -107,10 +107,10 @@ export default function SkyAtlas({ manifest, onSearch, onCurrentSeries }: {
     resolver.current?.abort(); const controller = new AbortController(); resolver.current = controller;
     const coordinates = parseSkyCoordinates(target);
     if (coordinates) { goto(...coordinates, 8); setError(""); return; }
-    if (staticPages) { setError("Введіть RA і Dec у градусах. Пошук за назвою потребує серверної версії."); return; }
+    if (!liveArchive) { setError("Введіть RA і Dec у градусах. Пошук за назвою потребує серверної версії."); return; }
     setNameBusy(true); setError("");
     try {
-      const response = await fetch(`/api/resolve?name=${encodeURIComponent(target.trim())}`, { signal: controller.signal });
+      const response = await fetch(apiUrl(`/api/resolve?name=${encodeURIComponent(target.trim())}`), { signal: controller.signal });
       const body = await response.json() as { ra: number; dec: number; error?: string };
       if (!response.ok) throw Error(body.error || "Назву не знайдено.");
       if (!parseSkyCoordinates(`${body.ra} ${body.dec}`)) throw Error("Служба повернула некоректні координати.");
@@ -133,7 +133,7 @@ export default function SkyAtlas({ manifest, onSearch, onCurrentSeries }: {
       const result = await collectCatalogueParts<SkyObservation, { records: SkyObservation[]; source_url: string; retrieved_at: string; error?: string }>({
         interval: { start, end }, movingObject: false,
         request: async interval => {
-          const response = await fetch("/api/field", { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
+          const response = await fetch(apiUrl("/api/field"), { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
             body: JSON.stringify({ ...query, ...interval, fov: 0.12, max_frames: MAX_CATALOGUE_CHUNK_FRAMES }) });
           return { status: response.status, ok: response.ok, body: await response.json() as { records: SkyObservation[]; source_url: string; retrieved_at: string; error?: string } };
         }, onProgress: p => { if (!controller.signal.aborted) setProgress(p.detail); },
@@ -159,7 +159,7 @@ export default function SkyAtlas({ manifest, onSearch, onCurrentSeries }: {
     <div className="atlas-heading"><div><span className="section-label">ОГЛЯД НЕБА · ICRS</span><h2><Globe2 size={25}/> Небесна сфера</h2><p>Оберніть небо. Оберіть ділянку. Знайдіть її спостереження.</p></div><button className="button" onClick={() => setCollapsed(v => !v)} aria-expanded={!collapsed}>{collapsed ? "Розгорнути карту" : "Згорнути карту"}</button></div>
     <div hidden={collapsed}>
       <div className="atlas-layout"><aside className="atlas-controls">
-        <form onSubmit={resolve}><label htmlFor="atlas-target">{staticPages ? "Координати RA, Dec" : "Об’єкт або координати"}</label><div className="atlas-search"><input id="atlas-target" value={target} onChange={e => setTarget(e.target.value)} placeholder={staticPages ? "210.80227, 54.34895" : "M101 або 210.80227, 54.34895"} disabled={!ready || nameBusy}/><button className="button" disabled={!ready || nameBusy || !target.trim()} aria-label="Знайти на сфері">{nameBusy ? <LoaderCircle size={17} className="animate-spin"/> : <Search size={17}/>}</button></div></form>
+        <form onSubmit={resolve}><label htmlFor="atlas-target">{!liveArchive ? "Координати RA, Dec" : "Об’єкт або координати"}</label><div className="atlas-search"><input id="atlas-target" value={target} onChange={e => setTarget(e.target.value)} placeholder={!liveArchive ? "210.80227, 54.34895" : "M101 або 210.80227, 54.34895"} disabled={!ready || nameBusy}/><button className="button" disabled={!ready || nameBusy || !target.trim()} aria-label="Знайти на сфері">{nameBusy ? <LoaderCircle size={17} className="animate-spin"/> : <Search size={17}/>}</button></div></form>
         <p className="atlas-help">Перетягуйте небо для обертання, прокручуйте для масштабу. Натисніть на точку, щоб поставити її в центр.</p>
         <label>Фон неба<select value={background} onChange={e => setBackground(e.target.value)} disabled={!ready}><option value="spherex">SPHEREx DR1 · інфрачервона мозаїка</option><option value="dss">DSS2 · оптичний огляд</option></select></label>
         {background === 'spherex' && <label>Спектральний канал мозаїки<select value={cubeIndex} onChange={e => setCubeIndex(Number(e.target.value))}>{hipsMeta.wavelengths.map((wave,i) => <option key={i} value={i}>D{Math.floor(i/17)+1} · канал {i%17+1} · {wave.toFixed(3)} мкм{[50,51].includes(i)?' · порожній':''}</option>)}</select></label>}
@@ -171,7 +171,7 @@ export default function SkyAtlas({ manifest, onSearch, onCurrentSeries }: {
           <div className="atlas-pair"><label>Від · UTC<input type="date" required value={start} onChange={e => setStart(e.target.value)} disabled={busy}/></label><label>До · UTC<input type="date" required value={end} min={start} onChange={e => setEnd(e.target.value)} disabled={busy}/></label></div>
           <div className="atlas-pair"><label>Реліз<select value={release} onChange={e => setRelease(e.target.value as "qr2" | "qr3" | "dr1")} disabled={busy}><option value="dr1">DR1</option><option value="qr3">QR3</option></select></label><label>Огляд<select value={survey} onChange={e => setSurvey(e.target.value as "wide" | "deep")} disabled={busy}><option value="wide">Wide</option><option value="deep">Deep</option></select></label></div>
           <label>Детектор<select value={detector} onChange={e => setDetector(Number(e.target.value))} disabled={busy}>{[1,2,3,4,5,6].map(d => <option key={d} value={d}>D{d}</option>)}</select></label>
-          <button className="button atlas-primary" disabled={staticPages || !ready || busy || nameBusy}>{busy ? <LoaderCircle size={16} className="animate-spin"/> : <Search size={16}/>} {busy ? "Перевіряємо архів…" : "Покриття центра SPHEREx"}</button>
+          <button className="button atlas-primary" disabled={!liveArchive || !ready || busy || nameBusy}>{busy ? <LoaderCircle size={16} className="animate-spin"/> : <Search size={16}/>} {busy ? "Перевіряємо архів…" : "Покриття центра SPHEREx"}</button>
         </form>
         {busy && <><p role="status" className="atlas-help">{progress}</p><button className="button" onClick={() => { request.current?.abort(); setBusy(false); setProgress(""); }}>Скасувати пошук</button></>}
         {error && <p className="error-message" role="alert">{error}</p>}

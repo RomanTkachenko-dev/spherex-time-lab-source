@@ -1,4 +1,6 @@
 import { assertProcessingCheckpoint, estimateRemainingPngBytes } from "./processing-state.mjs";
+let apiOrigin = "";
+const scienceAsset = path => self.location ? new URL(path, self.location.href).href : "/science/" + path;
 // Pinned scientific runtime; numerical processing stays off the interface thread.
 const RUNTIME = "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/";
 const CACHE_NAME = "spherex-fits-0.3";
@@ -27,7 +29,7 @@ async function runtime() {
     const { loadPyodide } = await import(RUNTIME + "pyodide.mjs");
     const py = await loadPyodide({ indexURL: RUNTIME });
     await py.loadPackage(["astropy", "scipy", "pillow"]);
-    const response = await fetch("/science/field_pipeline.py");
+    const response = await fetch(scienceAsset("field_pipeline.py"));
     if (!response.ok) throw Error("Не вдалося завантажити метод обробки.");
     const source = await response.text();
     const code_sha256 = hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(source)));
@@ -139,7 +141,7 @@ async function storageEstimate(checkpoint) {
     estimated_remaining_bytes: estimateRemainingPngBytes(checkpoint.stored_png_bytes || 0, checkpoint.frames.length, checkpoint.accepted.length) };
 }
 async function fetchFits(py, record, query) {
-  const url = "/api/cutout?" + new URLSearchParams({ url: record.url, ra: String(query.ra), dec: String(query.dec), cutout_ra: String(record.target_ra ?? query.ra), cutout_dec: String(record.target_dec ?? query.dec), fov: String(query.fov), release: query.release, survey: query.survey });
+  const url = apiOrigin + "/api/cutout?" + new URLSearchParams({ url: record.url, ra: String(query.ra), dec: String(query.dec), cutout_ra: String(record.target_ra ?? query.ra), cutout_dec: String(record.target_dec ?? query.dec), fov: String(query.fov), release: query.release, survey: query.survey });
   const response = await getCutout(url);
   py.FS.writeFile("/frame.fits", new Uint8Array(await response.arrayBuffer()));
   return { source_url: response.headers.get("X-Source-URL"), retrieved_at: response.headers.get("X-Retrieved-At") };
@@ -238,6 +240,7 @@ async function runLegacy(checkpoint, py, codeSha256) {
   return JSON.parse(await py.runPythonAsync("finish_series(catalogue_json, excluded_json, runtime_json)"));
 }
 async function build(data) {
+  apiOrigin = data.apiOrigin || "";
   try {
     const checkpoint = data.type === "resume" ? await readCheckpoint(data.assetSeriesId) : {
       version: 1, id: data.assetSeriesId, series_id: data.assetSeriesId, catalogue: data.catalogue,

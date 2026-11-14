@@ -1,0 +1,7 @@
+{
+  "name": "spherex-time-lab-api",
+  "main": "api-worker/index.ts",
+  "compatibility_date": "2026-05-01",
+  "workers_dev": true,
+  "vars": { "SITE_ORIGIN": "https://romantkachenko-dev.github.io" }
+}

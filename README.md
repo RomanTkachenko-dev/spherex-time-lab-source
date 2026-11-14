@@ -29,3 +29,12 @@ python research/build_lab_calibration.py
 Results and archive caches are generated locally. Candidate associations are positional and may be incomplete. Photometry and candidate recovery on real crowded backgrounds remain under validation.
 
 [SPHEREx archive](https://irsa.ipac.caltech.edu/Missions/spherex.html) · [Calibration documentation](https://caltech-ipac.github.io/irsa-tutorials/spherex-psf/)
+
+
+## GitHub Pages and live search
+
+The Pages demo includes 3I/ATLAS and four DR1 D2 exposures of the same field from August 2025 to February 2026. Rebuild the latter with `python research/build_epoch_demo.py`. It is a selected example, not the complete archive result.
+
+To enable live archive access, deploy the API with `npx wrangler deploy --config wrangler.api.jsonc` from an authorized Cloudflare account. Set `SITE_ORIGIN` in that configuration to your frontend origin, and set the repository Actions variable `PAGES_API_ORIGIN` to the resulting HTTPS Worker origin (no trailing slash). Run the Pages workflow again. CORS is a browser policy, not access control for server clients. Configure service quotas for the public API before advertising it widely.
+
+The per-track Gaia search records individual catalogue queries, truncation and failures. Its finite padding can miss high proper-motion sources. Candidate detection fits nearby point-source amplitudes and records the peaks omitted by its compute budget. Photometric errors still omit unmeasured systematics. The observer-specific small-body check is described by `research/identify_small_bodies.py`.

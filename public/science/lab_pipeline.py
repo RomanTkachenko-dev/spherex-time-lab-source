@@ -17,7 +17,7 @@ from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
 from astropy import units as u
 
-METHOD = 'native-epsf-laboratory-1.1'
+METHOD = 'native-epsf-laboratory-1.2'
 BAD_MASK = np.uint32(0xffffffff ^ ((1 << 21) | (1 << 12)))
 CAL = {}
 TILES = {}
@@ -60,7 +60,7 @@ def epsf_renderer(epsf, oversampling):
         return p/norm
     return render
 
-def fit_source(image, variance, valid, x0, y0, epsf, oversampling, fit_position=True):
+def fit_source(image, variance, valid, x0, y0, epsf, oversampling, fit_position=True, neighbours=()):
     """Weighted ePSF + planar background, with optional bounded centroid fit."""
     ix, iy = int(np.floor(x0)), int(np.floor(y0))
     if ix < 5 or iy < 5 or ix+5 >= image.shape[1] or iy+5 >= image.shape[0]:
@@ -74,33 +74,38 @@ def fit_source(image, variance, valid, x0, y0, epsf, oversampling, fit_position=
     if p[good].sum() < 0.8: raise ValueError('FLAGS або пропуски перекривають понад 20% моделі джерела.')
     d = image[ys, xs][good]; sigma = np.sqrt(variance[ys, xs][good])
     bx, by = (xx-x0)/5, (yy-y0)/5
-    design = np.column_stack([p[good], np.ones(len(d)), bx[good], by[good]])
+    # Nearby candidates have separate amplitudes, fitted jointly with the background.
+    nuisance = [render(xx, yy, nx, ny)[good] for nx, ny in neighbours
+                if 1.5 < np.hypot(nx-x0, ny-y0) <= 6]
+    design = np.column_stack([p[good], np.ones(len(d)), bx[good], by[good], *nuisance])
+    linear_count = design.shape[1]
     initial, _, rank, _ = np.linalg.lstsq(design/sigma[:, None], d/sigma, rcond=None)
-    if rank < 4: raise ValueError('Вироджена модель фону.')
+    if rank < linear_count: raise ValueError('Вироджена модель фону.')
     def residual(v):
-        px, py = (v[4], v[5]) if fit_position else (x0, y0)
+        px, py = (v[-2], v[-1]) if fit_position else (x0, y0)
         model = v[0]*render(xx, yy, px, py)+v[1]+v[2]*bx+v[3]*by
-        return (model[good]-d)/sigma
+        nuisance_signal = design[:, 4:] @ v[4:linear_count]
+        return (model[good]+nuisance_signal-d)/sigma
     start = np.r_[initial, x0, y0] if fit_position else initial
-    low = [-np.inf]*4 + ([x0-1.5, y0-1.5] if fit_position else [])
-    high = [np.inf]*4 + ([x0+1.5, y0+1.5] if fit_position else [])
+    low = [-np.inf]*linear_count + ([x0-1.5, y0-1.5] if fit_position else [])
+    high = [np.inf]*linear_count + ([x0+1.5, y0+1.5] if fit_position else [])
     fit = least_squares(residual, start, bounds=(low, high), x_scale='jac', max_nfev=120)
     if not fit.success or np.linalg.matrix_rank(fit.jac) < len(start):
         raise ValueError('Підгонка ePSF не збіглася або не визначає похибки.')
-    if fit_position and np.any(np.abs(fit.x[4:]-[x0, y0]) > 1.49):
+    if fit_position and np.any(np.abs(fit.x[-2:]-[x0, y0]) > 1.49):
         raise ValueError('Центр досяг межі пошуку; потрібні кращі початкові координати.')
     cov = np.linalg.inv(fit.jac.T @ fit.jac)
     dof = len(d)-len(start)
     reduced = float(np.dot(fit.fun, fit.fun)/dof)
     # Never shrink archive uncertainties; empirical excess scatter inflates them.
     cov *= max(1., reduced)
-    px, py = fit.x[4:] if fit_position else (x0, y0)
+    px, py = fit.x[-2:] if fit_position else (x0, y0)
     if render(xx, yy, px, py)[good].sum() < 0.8:
         raise ValueError('У підігнаній позиції недостатня підтримка ePSF.')
     return {'amplitude': float(fit.x[0]), 'error': float(np.sqrt(cov[0, 0])),
             'x': float(px), 'y': float(py), 'reduced_chi2': reduced, 'dof': dof,
-            'position_covariance_pixel2': cov[4:, 4:].tolist() if fit_position else None,
-            'background': float(fit.x[1]), 'used_pixels': int(good.sum())}
+            'position_covariance_pixel2': cov[-2:, -2:].tolist() if fit_position else None,
+            'background': float(fit.x[1]), 'used_pixels': int(good.sum()), 'neighbours_fitted': len(nuisance)}
 
 def calibrate_position(cal, header, x, y):
     # FITS cutout alternate WCS refers to the full detector. No guessed offsets.
@@ -118,12 +123,12 @@ def calibrate_position(cal, header, x, y):
         raise ValueError('Немає скінченної спектральної калібрації.')
     return zone, channel, wave, width
 
-def measure_at(image, variance, valid, wcs, header, cal, x, y, fit_position):
+def measure_at(image, variance, valid, wcs, header, cal, x, y, fit_position, neighbours=()):
     zone, _, _, _ = calibrate_position(cal, header, x, y)
-    fit = fit_source(image, variance, valid, x, y, cal['epsf'][zone], cal['oversampling'], fit_position)
+    fit = fit_source(image, variance, valid, x, y, cal['epsf'][zone], cal['oversampling'], fit_position, neighbours)
     zone2, channel, wave, width = calibrate_position(cal, header, fit['x'], fit['y'])
     if zone2 != zone:
-        fit = fit_source(image, variance, valid, x, y, cal['epsf'][zone2], cal['oversampling'], fit_position)
+        fit = fit_source(image, variance, valid, x, y, cal['epsf'][zone2], cal['oversampling'], fit_position, neighbours)
         zone = zone2
         if calibrate_position(cal, header, fit['x'], fit['y'])[0] != zone:
             raise ValueError('Нестійка позиція на межі зон ePSF.')
@@ -147,24 +152,44 @@ def measure_at(image, variance, valid, wcs, header, cal, x, y, fit_position):
             'centroid_fitted': bool(fit_position),
             'quality_ok': bool(fit['reduced_chi2'] <= 3 and (not fit_position or snr >= 5))}
 
-def detect_sources(image, variance, valid, wcs, header, cal, threshold, max_sources):
+def detect_sources(image, variance, valid, wcs, header, cal, threshold, max_sources, diagnostics=None):
     fill = np.median(image[valid]) if valid.any() else 0.
     background = median_filter(np.where(valid, image, fill), size=11, mode='nearest')
-    snr = np.where(valid, (image-background)/np.sqrt(np.where(valid, variance, 1)), -np.inf)
+    residual = np.where(valid, image-background, 0.)
+    # A local empirical scale suppresses peaks in structured background.
+    mad = 1.4826 * median_filter(np.abs(residual), size=11, mode='nearest')
+    noise = np.maximum(np.sqrt(np.where(valid, variance, 1)), mad)
+    snr = np.where(valid, residual/noise, -np.inf)
     peaks = (snr == maximum_filter(snr, size=3, mode='constant', cval=-np.inf)) & (snr >= threshold)
     peaks[:5] = False; peaks[-5:] = False; peaks[:, :5] = False; peaks[:, -5:] = False
     ys, xs = np.where(peaks)
     order = np.argsort(-snr[ys, xs], kind='stable')
-    if len(order) > max_sources:
-        raise ValueError(f'Знайдено {len(order)} піків; ліміт {max_sources}. Зменште поле або підвищте поріг.')
+    coordinates = np.column_stack([xs, ys])
+    tree = cKDTree(coordinates) if len(coordinates) else None
+    if diagnostics is not None:
+        diagnostics.update(total_peaks=len(order), attempted_peaks=min(len(order), max_sources),
+                           skipped_peaks=max(0, len(order)-max_sources), duplicates=0,
+                           rejected_quality=0, rejected_fit=0)
     detections, rejected = [], 0
-    for i in order:
+    for i in order[:max_sources]:
+        neighbours = coordinates[tree.query_ball_point(coordinates[i], 6)]
+        # Bound the nuisance model and choose closest distinct peak positions.
+        distances = np.linalg.norm(neighbours-coordinates[i], axis=1)
+        nearby = neighbours[np.argsort(distances, kind='stable')][1:9]
         try:
-            result = measure_at(image, variance, valid, wcs, header, cal, float(xs[i]), float(ys[i]), True)
+            result = measure_at(image, variance, valid, wcs, header, cal,
+                                float(xs[i]), float(ys[i]), True, nearby)
             if result['quality_ok'] and result['snr'] >= threshold:
-                if all(np.hypot(result['x']-d['x'], result['y']-d['y']) > 1 for d in detections): detections.append(result)
-            else: rejected += 1
-        except ValueError: rejected += 1
+                if all(np.hypot(result['x']-d['x'], result['y']-d['y']) > 1 for d in detections):
+                    detections.append(result)
+                elif diagnostics is not None:
+                    diagnostics['duplicates'] += 1
+            else:
+                rejected += 1
+                if diagnostics is not None: diagnostics['rejected_quality'] += 1
+        except (ValueError, np.linalg.LinAlgError):
+            rejected += 1
+            if diagnostics is not None: diagnostics['rejected_fit'] += 1
     return detections, int(len(order)), rejected
 
 def analyze_fits(raw, record, options):
@@ -202,15 +227,16 @@ def analyze_fits(raw, record, options):
             target = measure_at(image, variance, valid, wcs, hdr, cal, x, y, options['fit_position'])
         except (ValueError, KeyError) as e: target_error = str(e)
         detections, peak_count, rejected, detection_error = [], 0, 0, None
+        detection_diagnostics = {}
         if options['detect']:
-            try: detections, peak_count, rejected = detect_sources(image, variance, valid, wcs, hdr, cal, options['snr'], options['max_sources'])
+            try: detections, peak_count, rejected = detect_sources(image, variance, valid, wcs, hdr, cal, options['snr'], options['max_sources'], detection_diagnostics)
             except ValueError as e: detection_error = str(e)
         return {'id': record['id'], 'observation': record['observation'], 'detector': detector,
                 'mjd': float(hdr['MJD-AVG']), 'date': str(hdr['DATE-AVG']), 'release': record['release'],
                 'source_url': record['url'], 'cutout_url': record['cutout_url'], 'sha256': digest,
                 'target': target, 'target_error': target_error, 'detections': detections,
                 'peak_count': peak_count, 'rejected_peaks': rejected, 'detection_error': detection_error,
-                'epsf_source': epsf_source}
+                'epsf_source': epsf_source, 'detection_diagnostics': detection_diagnostics}
 
 def response_curve(point, detector):
     cal = CAL[detector]; ch = point['channel_local']
@@ -326,7 +352,7 @@ def finish_lab(frames, options):
             'tracks': tracks, 'tracking_error': tracking_error,
             'options': options, 'error_model': 'conditional diagonal VARIANCE, inflated by max(1,reduced chi2)',
             'response_model': 'laboratory middle-pixel fiducial shifted to calibrated pixel band centre',
-            'limits': ['Point-source model; no deblending or extended-source photometry.',
+            'limits': ['Point-source model; the detector fits fixed-position nearby nuisance sources. No extended-source photometry.',
                        'Flux and centroid uncertainties exclude calibration, ePSF, WCS and pixel covariance systematics.',
                        'Spectral matches are conditional on shifted fiducial response approximation, not exact per-pixel throughput.',
                        'Spectral points at different wavelengths may have different epochs; averages assume stationarity.',
