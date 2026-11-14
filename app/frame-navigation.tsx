@@ -11,12 +11,12 @@ export default function FrameNavigation({frames,index,reference,compare,onSelect
     const value=String(new FormData(event.currentTarget).get("position")??"");
     if(target==="utc") {
       const milliseconds=Date.parse(value+"Z");
-      if(!Number.isFinite(milliseconds)){setNotice("Введіть коректну дату й час UTC.");return;}
+      if(!Number.isFinite(milliseconds)){setNotice(t("Введіть коректну дату й час UTC."));return;}
       const selected=nearestFrameIndexAtMjd(frames,milliseconds/86400000+40587);
-      onSelect(selected);setNotice(`Найближчий кадр: ${selected+1} · ${frames[selected].date.replace(/Z$/,"")} UTC.`);
+      onSelect(selected);setNotice(t("Найближчий кадр: {0} · {1} UTC.", selected+1, frames[selected].date.replace(/Z$/,"")));
     } else {
       const selected=Number(value);
-      if(!Number.isInteger(selected)||selected<1||selected>frames.length){setNotice(`Номер має бути від 1 до ${frames.length}.`);return;}
+      if(!Number.isInteger(selected)||selected<1||selected>frames.length){setNotice(t("Номер має бути від 1 до {0}.", frames.length));return;}
       if(target==="reference")onReference(selected-1);else onSelect(selected-1);
       setNotice("");
     }

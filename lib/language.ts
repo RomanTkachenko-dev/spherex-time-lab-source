@@ -1,5 +1,6 @@
 "use client";
 import { createContext, useContext } from "react";
+import { ENGLISH, ENGLISH_PATTERNS } from "./i18n-en.ts";
 export type Language = "en" | "uk";
 export const LanguageContext = createContext<Language>("en");
 const english: Record<string, string> = {
@@ -192,7 +193,28 @@ const english: Record<string, string> = {
   "Положення за власним рухом каталогу, не виявлення": "Catalogue proper-motion position, not a detection",
   "Пунктирний маркер показує каталожну позицію, поширену сталим власним рухом до DATE-AVG FITS. Паралакс і променеву швидкість не враховано; це не виявлення об’єкта.": "The dashed marker shows the catalogue position propagated with constant proper motion to the FITS DATE-AVG. Parallax and radial velocity are not applied; it is not a detection."
 };
+const dictionary: Record<string, string> = { ...english, ...ENGLISH };
+
+/**
+ * English for a Ukrainian source string: exact entries first, then patterns for messages
+ * that carry values (API, worker and pipeline errors arrive already formatted).
+ * Multi-line worker errors are translated line by line; unknown text is returned unchanged.
+ */
+export function translate(text: string, language: Language): string {
+  if (language !== "en" || !text) return text;
+  const exact = dictionary[text] ?? dictionary[text.trim()];
+  if (exact !== undefined) return exact;
+  if (text.includes("\n")) return text.split("\n").map(line => translate(line, language)).join("\n");
+  for (const [pattern, replacement] of ENGLISH_PATTERNS) {
+    if (pattern.test(text)) return text.replace(pattern, (...groups) => replacement.replace(/\$(\d)/g, (_, i) => translate(String(groups[Number(i)] ?? ""), language)));
+  }
+  return text;
+}
 export function useTranslation() {
   const language = useContext(LanguageContext);
-  return (text: string) => language === "en" ? english[text] ?? text : text;
+  /** `t("Кадр {0} із {1}", 3, 12)`: values replace {0}, {1}… after translation, so word order may differ. */
+  return (text: string | null | undefined, ...values: (string | number)[]) => {
+    const translated = translate(text ?? "", language);
+    return values.length ? translated.replace(/\{(\d+)\}/g, (match, i) => i < values.length ? String(values[Number(i)]) : match) : translated;
+  };
 }

@@ -24,3 +24,19 @@ test("sphere UTC navigation preserves real temporal spacing and exposes each dup
   assert.equal(nearestFrameIndexAtFraction(frames, 0.1), 2);
   assert.equal(nearestFrameIndexAtFraction(frames, 0), 0);
 });
+test("shareable atlas links round-trip through the URL reader and escape the embed code", async () => {
+  const { buildAtlasLink, embedCode, readAtlasLink } = await import("../lib/sky-atlas.ts");
+  const state = { ra: 133.8189083, dec: -7.2450104, fov: 0.123456, start: "2025-05-01", end: "2026-04-30", detector: 6, release: "dr1", survey: "wide", language: "en", search: true, series: true } as const;
+  const link = buildAtlasLink("https://example.org/spherex-time-lab-source/?old=1#x", state);
+  const url = new URL(link);
+  assert.equal(url.pathname, "/spherex-time-lab-source/"); assert.equal(url.hash, ""); assert.equal(url.searchParams.get("old"), null);
+  const read = readAtlasLink(url.searchParams);
+  assert.deepEqual(read.coordinates, [133.818908, -7.24501]);
+  assert.deepEqual([read.start, read.end, read.detector, read.release, read.survey, read.fov, read.search, read.series, read.embed], ["2025-05-01", "2026-04-30", 6, "dr1", "wide", 0.1235, true, true, false]);
+  assert.equal(new URL(buildAtlasLink(link, { ...state, ra: 359.99999999, search: false, series: false, embed: true })).searchParams.get("ra"), "0");
+  assert.equal(readAtlasLink(new URL(buildAtlasLink(link, { ...state, series: false })).searchParams).series, false);
+  const code = embedCode(link);
+  assert.match(code, /^<iframe title="SPHEREx Time Lab" src="https:\/\/example\.org\/[^"]+&amp;dec=-7\.24501&amp;/);
+  assert.ok(!code.includes("&dec") && !/src="[^"]*"[^ ]/.test(code));
+  assert.equal(readAtlasLink(new URLSearchParams("ra=10&dec=5&series=1")).series, false, "series needs both dates");
+});

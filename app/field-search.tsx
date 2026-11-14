@@ -57,7 +57,7 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
   }
   async function prepareAt(target: SkySearchTarget) {
     setOpen(true); onOpen();
-    if (busy || resolving) { setError('Спочатку завершіть або зупиніть поточну обробку.'); return; }
+    if (busy || resolving) { setError(t('Спочатку завершіть або зупиніть поточну обробку.')); return; }
     setMode('series');setPlace('custom');setRa(String(target.ra));setDec(String(target.dec));
     setStart(target.start);setEnd(target.end);setDetector(String(target.detector));setRelease(target.release);setSurvey(target.survey);setFov('0.12');
     setTargetName('');setResolvedTarget(null);setEphemeris(null);clearMotion();setWavelengthMin('');setWavelengthMax('');setSelection('');
@@ -77,21 +77,21 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
       if(currentJob!==job.current)return;
       const assembled=assembleCatalogueParts(parts,{start:target.start,end:target.end},false);
       const body={...assembled,query:assembled.query as FieldQuery};
-      if(body.records.length<2)throw Error('Для порівняння потрібні принаймні дві експозиції.');
+      if(body.records.length<2)throw Error(t('Для порівняння потрібні принаймні дві експозиції.'));
       const pair = target.comparisonUrls?.map(url => body.records.find(record => record.url === url));
       if (pair) {
         if (!pair[0] || !pair[1] || pair[0].url === pair[1].url) {
-          throw Error("Вибрану пару не знайдено в каталозі. Виберіть експозиції ще раз.");
+          throw Error(t("Вибрану пару не знайдено в каталозі. Виберіть експозиції ще раз."));
         }
         body.records = [pair[0], pair[1]].sort((a, b) => a.mjd - b.mjd);
         body.candidate_count = 2;
         body.selection = "Selected pair only. Shared display scale computed from these two exposures.";
       }
-      setSelection(`${target.release.toUpperCase()} · D${target.detector} · ${body.records.length} експозицій · RA ${target.ra.toFixed(5)}°, Dec ${target.dec.toFixed(5)}°`);
+      setSelection(t("{0} · D{1} · {2} експозицій · RA {3}°, Dec {4}°", target.release.toUpperCase(), target.detector, body.records.length, target.ra.toFixed(5), target.dec.toFixed(5)));
       startWorker(currentJob,crypto.randomUUID(),body);
     } catch(e) { if(currentJob===job.current){stop();setProgress(null);setError(e instanceof Error?e.message:String(e));} }
   }
-  async function refreshCheckpoints() { try { setCheckpoints(await listProcessingCheckpoints()); } catch(e) { setError(e instanceof Error ? e.message : "Сховище контрольних точок недоступне."); } }
+  async function refreshCheckpoints() { try { setCheckpoints(await listProcessingCheckpoints()); } catch(e) { setError(e instanceof Error ? e.message : t("Сховище контрольних точок недоступне.")); } }
   // Closing, pausing and reload keep committed checkpoints. Deletion is a separate explicit action.
   function stop() { job.current++; worker.current?.terminate(); worker.current=null; request.current?.abort(); if(timeout.current)clearTimeout(timeout.current);assetSeries.current=null;setBusy(false); }
   useEffect(() => {
@@ -100,7 +100,7 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
   }, []);
   function armTimeout() {
     if(timeout.current)clearTimeout(timeout.current);
-    timeout.current=setTimeout(()=>{stop();void refreshCheckpoints();setError("Обчислення довго не відповідає. Останню контрольну точку збережено; його можна продовжити зі списку нижче.");},180000);
+    timeout.current=setTimeout(()=>{stop();void refreshCheckpoints();setError(t("Обчислення довго не відповідає. Останню контрольну точку збережено; його можна продовжити зі списку нижче."));},180000);
   }
   function startWorker(currentJob: number, id: string, catalogue?: ArchiveResult) {
     const w=new Worker(publicAsset("/science/field-worker.mjs"),{type:"module"});worker.current=w;assetSeries.current=id;armTimeout();
@@ -110,7 +110,7 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
       if(data.type==="progress")setProgress(data);
       if(data.type==="complete") {
         stop();setBusy(true);
-        setProgress({stage:"save",completed:0,total:0,detail:"Збереження готової дослідницької сесії…"});
+        setProgress({stage:"save",completed:0,total:0,detail:t("Збереження готової дослідницької сесії…")});
         try {
           const manifest=validateManifest(data.manifest);
           const pairOnly = manifest.completeness?.selection.startsWith("Selected pair only.");
@@ -119,29 +119,29 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
           requestedComparison.current = undefined;
           await completeProcessingCheckpoint(id);
           setProgress(null);setOpen(false);
-        } catch(e) { setError(e instanceof Error?e.message:"Набір не пройшов перевірку. Контрольна точка збережена."); }
+        } catch(e) { setError(e instanceof Error?e.message:t("Набір не пройшов перевірку. Контрольна точка збережена.")); }
         finally { setProgress(null);setBusy(false);void refreshCheckpoints(); }
       }
       if(data.type==="error") {
         stop();setProgress(null);void refreshCheckpoints();
-        setError(String(data.error).split("\n").filter(Boolean).at(-1)?.replace(/^ValueError: /,"")||"Помилка обробки.");setExcluded(data.excluded||[]);
+        setError(String(data.error).split("\n").filter(Boolean).at(-1)?.replace(/^ValueError: /,"")||t("Помилка обробки."));setExcluded(data.excluded||[]);
       }
     };
-    w.onerror=()=>{if(currentJob!==job.current)return;stop();void refreshCheckpoints();setError("Обчислювальний модуль зупинився. Збережену контрольну точку можна продовжити.");};
+    w.onerror=()=>{if(currentJob!==job.current)return;stop();void refreshCheckpoints();setError(t("Обчислювальний модуль зупинився. Збережену контрольну точку можна продовжити."));};
     w.postMessage(catalogue?{type:"build",catalogue,assetSeriesId:id,apiOrigin}:{type:"resume",assetSeriesId:id,apiOrigin});
   }
   function resumeCheckpoint(checkpoint: ProcessingCheckpointSummary) {
     if(busy||resolving)return;
     requestedComparison.current=undefined;
     stop();setBusy(true);setError("");setExcluded([]);setResult(null);
-    setSelection(`${checkpoint.release.toUpperCase()} · ${checkpoint.survey} · D${checkpoint.detector} · ${checkpoint.total} записів · RA ${checkpoint.ra}° · Dec ${checkpoint.dec}° · ${checkpoint.start} — ${checkpoint.end} UTC`);
-    setProgress({stage:"restore",completed:0,total:checkpoint.total,detail:"Відновлення збереженого обчислення…"});
+    setSelection(t("{0} · {1} · D{2} · {3} записів · RA {4}° · Dec {5}° · {6} — {7} UTC", checkpoint.release.toUpperCase(), checkpoint.survey, checkpoint.detector, checkpoint.total, checkpoint.ra, checkpoint.dec, checkpoint.start, checkpoint.end));
+    setProgress({stage:"restore",completed:0,total:checkpoint.total,detail:t("Відновлення збереженого обчислення…")});
     startWorker(job.current,checkpoint.id);
   }
   async function removeCheckpoint(id: string) {
     if(busy)return;
     try { await deleteProcessingCheckpoint(id);await refreshCheckpoints();setError(""); }
-    catch(e){setError(e instanceof Error?e.message:"Не вдалося видалити контрольну точку.");}
+    catch(e){setError(e instanceof Error?e.message:t("Не вдалося видалити контрольну точку."));}
   }
   function choosePlace(value: "atlas" | "m101" | "custom" | "moving") {
     if(busy||resolving)return;
@@ -167,31 +167,31 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
     setEphemeris(null); setError("");
     if (!file) return;
     try {
-      if (file.size > 2_000_000) throw Error("Файл завеликий для імпорту (ліміт 2 MB).");
+      if (file.size > 2_000_000) throw Error(t("Файл завеликий для імпорту (ліміт 2 MB)."));
       const text = await file.text();
       const parsed = parseHorizonsText(text);
       const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
       const source_sha256 = [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,"0")).join("");
       setEphemeris({source:"JPL Horizons",source_url:"https://ssd.jpl.nasa.gov/horizons/app.html",target_name:parsed.target_name,source_file_name:file.name.slice(0,128),source_sha256,observer:"Earth geocenter",frame:"ICRF",time_scale:"UTC",points:parsed.points});
       setTargetName(parsed.target_name);
-    } catch(e) { setError(e instanceof Error?e.message:"Не вдалося прочитати ефемериду Horizons."); }
+    } catch(e) { setError(e instanceof Error?e.message:t("Не вдалося прочитати ефемериду Horizons.")); }
   }
   async function resolveTarget() {
     if(busy||resolving)return;
     const name = targetName.trim();
-    if (!name) { setError("Введіть назву об’єкта для пошуку координат."); return; }
+    if (!name) { setError(t("Введіть назву об’єкта для пошуку координат.")); return; }
     setResolving(true); setError(""); setResolvedTarget(null);
     try {
       const response = await fetch(apiUrl(`/api/resolve?name=${encodeURIComponent(name)}`), { signal: AbortSignal.timeout(12000) });
       const body = await response.json() as ResolvedTarget & { error?: string };
-      if (!response.ok) throw Error(body.error || "Не вдалося розпізнати назву.");
-      if (!Number.isFinite(body.ra) || !Number.isFinite(body.dec) || body.ra < 0 || body.ra >= 360 || body.dec < -90 || body.dec > 90) throw Error("Служба повернула некоректні координати.");
+      if (!response.ok) throw Error(body.error || t("Не вдалося розпізнати назву."));
+      if (!Number.isFinite(body.ra) || !Number.isFinite(body.dec) || body.ra < 0 || body.ra >= 360 || body.dec < -90 || body.dec > 90) throw Error(t("Служба повернула некоректні координати."));
       setRa(String(Number(body.ra.toFixed(8)))); setDec(String(Number(body.dec.toFixed(8))));
       const motion = body.proper_motion;
       if (motion && Number.isFinite(motion.pm_ra_masyr) && Number.isFinite(motion.pm_dec_masyr)) { setPmRa(String(motion.pm_ra_masyr)); setPmDec(String(motion.pm_dec_masyr)); setPmEpoch(String(motion.epoch_jyear)); }
       else clearMotion();
       setPlace("custom"); setResolvedTarget(body);
-    } catch(e) { setError(e instanceof Error ? e.message : "Не вдалося розпізнати назву."); }
+    } catch(e) { setError(e instanceof Error ? e.message : t("Не вдалося розпізнати назву.")); }
     finally { setResolving(false); }
   }
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -199,15 +199,15 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
     if(busy||resolving)return;
     requestedComparison.current=undefined;
     const mostSearch=place==="moving"&&motionMode==="most";
-    if (mostSearch && !mostName.trim()) { setError("Уведіть назву або NAIF ID цілі для пошуку IRSA MOST."); return; }
-    if (place==="moving" && motionMode==="horizons" && !ephemeris) { setError("Для Horizons спочатку імпортуйте текстову ефемериду."); return; }
-    if (place!=="moving" && targetName.trim() && !resolvedTarget) { setError("Спочатку розпізнайте назву кнопкою «Знайти координати» або очистьте її та введіть RA/Dec вручну."); return; }
+    if (mostSearch && !mostName.trim()) { setError(t("Уведіть назву або NAIF ID цілі для пошуку IRSA MOST.")); return; }
+    if (place==="moving" && motionMode==="horizons" && !ephemeris) { setError(t("Для Horizons спочатку імпортуйте текстову ефемериду.")); return; }
+    if (place!=="moving" && targetName.trim() && !resolvedTarget) { setError(t("Спочатку розпізнайте назву кнопкою «Знайти координати» або очистьте її та введіть RA/Dec вручну.")); return; }
     let motion: ProperMotionReference | null = null;
     try { motion = place === "moving" ? null : motionReference(); }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); return; }
     stop();const currentJob=job.current;
     setBusy(true);setError("");setResult(null);setExcluded([]);setSelection("");
-    setProgress({stage:"catalogue",completed:0,total:0,detail:"Пошук експозицій в IRSA…"});
+    setProgress({stage:"catalogue",completed:0,total:0,detail:t("Пошук експозицій в IRSA…")});
     const params = new URLSearchParams();
     new FormData(e.currentTarget).forEach((value,key)=>{if(typeof value==="string")params.set(key,value.trim());});
     params.set("release",release);params.set("survey",survey);
@@ -264,18 +264,18 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
       } else {
         const response = await fetch(apiUrl(endpoint),{method:"GET",signal:controller.signal});
         const listBody = await response.json() as ArchiveResponse;
-        if(!response.ok)throw Error(listBody.error||"Запит не виконано.");
+        if(!response.ok)throw Error(listBody.error||t("Запит не виконано."));
         body = listBody as ArchiveResult;
       }
-      if(!Array.isArray(body.records))throw Error("Некоректна відповідь архіву.");
+      if(!Array.isArray(body.records))throw Error(t("Некоректна відповідь архіву."));
       if(currentJob!==job.current)return;
       if(mode==="list"){setResult(body);setBusy(false);setProgress(null);return;}
       if(body.records.length<2)throw Error(body.records.length===0
-        ? "За цими координатами й датами придатних експозицій не знайдено. Розширте період або виберіть перевірений приклад."
-        : "Знайдено лише одну придатну експозицію. Для часової серії потрібні щонайменше дві: спробуйте ширший період або змініть область неба.");
-      setSelection(`${body.query.release.toUpperCase()} · ${body.query.survey==="most"?"збіги IRSA MOST":body.query.survey==="deep"?"Deep Survey":"Wide Survey"}. Знайдено: ${body.matched_count}. До перевірки кадрів: ${body.records.length}. ${body.catalogue_truncated?"Каталог обмежено; вибірка неповна.":""}`);
+        ? t("За цими координатами й датами придатних експозицій не знайдено. Розширте період або виберіть перевірений приклад.")
+        : t("Знайдено лише одну придатну експозицію. Для часової серії потрібні щонайменше дві: спробуйте ширший період або змініть область неба."));
+      setSelection(t("{0} · {1}. Знайдено: {2}. До перевірки кадрів: {3}.", body.query.release.toUpperCase(), body.query.survey==="most"?t("збіги IRSA MOST"):body.query.survey==="deep"?"Deep Survey":"Wide Survey", body.matched_count, body.records.length)+(body.catalogue_truncated?" "+t("Каталог обмежено; вибірка неповна."):""));
       startWorker(currentJob,crypto.randomUUID(),body);
-    } catch(e) { if(currentJob!==job.current)return;stop();if(!(e instanceof Error&&e.name==="AbortError"))setError(e instanceof Error?e.message:"Не вдалося виконати запит."); }
+    } catch(e) { if(currentJob!==job.current)return;stop();if(!(e instanceof Error&&e.name==="AbortError"))setError(e instanceof Error?e.message:t("Не вдалося виконати запит.")); }
   }
   let motionPreview: { now: { ra: number; dec: number }; shift: number } | null = null;
   try {
@@ -288,7 +288,7 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
   } catch { /* Incomplete input: the submit handler reports it. */ }
   useImperativeHandle(controlRef, () => ({ openAt: target => {
     setOpen(true); onOpen();
-    if (busy || resolving) { setError("Спочатку завершіть або зупиніть поточну обробку, потім повторно оберіть поле на сфері."); return; }
+    if (busy || resolving) { setError(t("Спочатку завершіть або зупиніть поточну обробку, потім повторно оберіть поле на сфері.")); return; }
     setMode("series"); setPlace("custom"); setRa(String(target.ra)); setDec(String(target.dec));
     setStart(target.start); setEnd(target.end); setDetector(String(target.detector));
     setRelease(target.release); setSurvey(target.survey); setFov("0.12");
@@ -297,50 +297,50 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
   }, prepareAt: target => { void prepareAt(target); } }));
   return <Dialog open={open} onOpenChange={value=>{if(progress?.stage==="save")return;if(value){onOpen();void refreshCheckpoints();}else{stop();setProgress(null);}setOpen(value);}}>
     <DialogTrigger asChild><button className="button archive-button"><Search size={17}/>{t("Знайти кадри")}</button></DialogTrigger>
-    <DialogContent className="archive-dialog" showCloseButton={false}><DialogClose className="dialog-close" aria-label={t("Закрити")}><X size={18}/></DialogClose><DialogHeader><DialogTitle>{t("Знайти спостереження неба")}</DialogTitle><DialogDescription>Оберіть готове поле або введіть координати. Потім задайте період — ми перевіримо покриття архіву SPHEREx.</DialogDescription></DialogHeader>
+    <DialogContent className="archive-dialog" showCloseButton={false}><DialogClose className="dialog-close" aria-label={t("Закрити")}><X size={18}/></DialogClose><DialogHeader><DialogTitle>{t("Знайти спостереження неба")}</DialogTitle><DialogDescription>{t("Оберіть готове поле або введіть координати. Потім задайте період — ми перевіримо покриття архіву SPHEREx.")}</DialogDescription></DialogHeader>
       <Tabs value={mode} onValueChange={value=>{if(busy||resolving)return;setMode(value);setResult(null);setError("");setProgress(null);}}><TabsList><TabsTrigger value="series" disabled={busy||resolving}>{t("Часова серія")}</TabsTrigger><TabsTrigger value="list" disabled={busy||resolving||place==="moving"}>{t("Окремі експозиції")}</TabsTrigger></TabsList></Tabs>
-      <p className="dialog-intro">{mode==="series"?(place==="moving"?"Імпортуйте ефемериду; запит охопить її траєкторію в межах одного спільного поля ICRS.":"Для швидкого старту виберіть приклад. Координати задають центр ділянки ICRS; дати — календарні дні UTC, кінцева дата включається."):"Знайдіть сирі записи архіву в межах 18″ від заданої координати. Цей режим показує перелік експозицій і посилання на оригінальні FITS-файли."}</p>
+      <p className="dialog-intro">{mode==="series"?(place==="moving"?t("Імпортуйте ефемериду; запит охопить її траєкторію в межах одного спільного поля ICRS."):t("Для швидкого старту виберіть приклад. Координати задають центр ділянки ICRS; дати — календарні дні UTC, кінцева дата включається.")):t("Знайдіть сирі записи архіву в межах 18″ від заданої координати. Цей режим показує перелік експозицій і посилання на оригінальні FITS-файли.")}</p>
       <form onSubmit={submit} className="archive-form">
         <section className={place==="moving"?"search-step moving-search":"search-step"}><div className="step-heading"><span>1</span><div><strong>{t("Ділянка неба")}</strong><small>{t("Виберіть перевірене поле або задайте координати")}</small></div></div>
-          <div className="place-presets" role="group" aria-label="Готові поля неба">
-            <button type="button" className={`place-card ${place==="atlas"?"selected":""}`} aria-pressed={place==="atlas"} disabled={busy||resolving} onClick={()=>choosePlace("atlas")}><strong>3I / ATLAS</strong><small>Ділянка · DR1 · 14.12.2025</small></button>
-            <button type="button" className={`place-card ${place==="m101"?"selected":""}`} aria-pressed={place==="m101"} disabled={busy||resolving} onClick={()=>choosePlace("m101")}><strong>M101</strong><small>Ділянка · DR1 · 2025</small></button>
-            <button type="button" className={`place-card ${place==="custom"?"selected":""}`} aria-pressed={place==="custom"} disabled={busy||resolving} onClick={()=>choosePlace("custom")}><strong>{t("Мої координати")}</strong><small>Введіть ICRS RA та Dec у градусах</small></button>
-            <button type="button" className={place==="moving"?"place-card selected":"place-card"} aria-pressed={place==="moving"} disabled={busy||resolving} onClick={()=>choosePlace("moving")}><strong>{t("Рухома ціль")}</strong><small>IRSA MOST або Horizons</small></button>
+          <div className="place-presets" role="group" aria-label={t("Готові поля неба")}>
+            <button type="button" className={`place-card ${place==="atlas"?"selected":""}`} aria-pressed={place==="atlas"} disabled={busy||resolving} onClick={()=>choosePlace("atlas")}><strong>3I / ATLAS</strong><small>{t("Ділянка · DR1 · 14.12.2025")}</small></button>
+            <button type="button" className={`place-card ${place==="m101"?"selected":""}`} aria-pressed={place==="m101"} disabled={busy||resolving} onClick={()=>choosePlace("m101")}><strong>M101</strong><small>{t("Ділянка · DR1 · 2025")}</small></button>
+            <button type="button" className={`place-card ${place==="custom"?"selected":""}`} aria-pressed={place==="custom"} disabled={busy||resolving} onClick={()=>choosePlace("custom")}><strong>{t("Мої координати")}</strong><small>{t("Введіть ICRS RA та Dec у градусах")}</small></button>
+            <button type="button" className={place==="moving"?"place-card selected":"place-card"} aria-pressed={place==="moving"} disabled={busy||resolving} onClick={()=>choosePlace("moving")}><strong>{t("Рухома ціль")}</strong><small>{t("IRSA MOST або Horizons")}</small></button>
           </div>
-          <div className="resolve-name"><label htmlFor="target-name">{t("Або введіть назву об’єкта")}</label><div className="resolve-controls"><Input id="target-name" value={targetName} onChange={e=>{const value=e.target.value;setTargetName(value);setResolvedTarget(null);setError("");if(value){setPlace("custom");setRa("");setDec("");}}} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();void resolveTarget();}}} disabled={busy||resolving} placeholder="Напр. M101 або NGC 6822"/><button className="button resolve-button" type="button" onClick={resolveTarget} disabled={busy||resolving||!targetName.trim()}>{resolving?<LoaderCircle className="animate-spin" size={15}/>:<Search size={15}/>} {resolving?"Шукаємо…":"Знайти координати"}</button></div><small>Назви позасонячних об’єктів шукаються через каталоги SIMBAD/NED. Для зір SIMBAD власний рух підставляється автоматично; для рухомих тіл Сонячної системи оберіть «Рухома ціль».</small>{resolvedTarget&&<div className="resolved-target" role="status"><strong>{resolvedTarget.canonical_name}</strong><span>RA {resolvedTarget.ra.toFixed(6)}° · Dec {resolvedTarget.dec.toFixed(6)}°</span><small>{resolvedTarget.resolver} · {resolvedTarget.service}{resolvedTarget.reference_position?` · ref. ${resolvedTarget.reference_position}`:""}. {resolvedTarget.proper_motion?t("Каталожні координати епохи J2000 і власний рух SIMBAD; позиція поширюється на час кожного кадру."):t("Каталожні координати; служба не повернула власного руху.")} {t("Це не виявлення SPHEREx.")}</small></div>}</div>
-          <div className="coordinate-fields"><label><span>RA <small>пряме піднесення · 0–360°</small></span><Input name="ra" type="number" step="any" min="0" max="359.999999999" value={ra} onChange={e=>{setRa(e.target.value);setPlace("custom");setResolvedTarget(null);setTargetName("");}} required={place!=="moving"} disabled={busy||resolving||place==="moving"} placeholder="Напр. 167.2"/></label><label><span>Dec <small>схилення · −90–+90°</small></span><Input name="dec" type="number" step="any" min="-90" max="90" value={dec} onChange={e=>{setDec(e.target.value);setPlace("custom");setResolvedTarget(null);setTargetName("");}} required={place!=="moving"} disabled={busy||resolving||place==="moving"} placeholder="Напр. +5.15"/></label></div>
+          <div className="resolve-name"><label htmlFor="target-name">{t("Або введіть назву об’єкта")}</label><div className="resolve-controls"><Input id="target-name" value={targetName} onChange={e=>{const value=e.target.value;setTargetName(value);setResolvedTarget(null);setError("");if(value){setPlace("custom");setRa("");setDec("");}}} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();void resolveTarget();}}} disabled={busy||resolving} placeholder={t("Напр. M101 або NGC 6822")}/><button className="button resolve-button" type="button" onClick={resolveTarget} disabled={busy||resolving||!targetName.trim()}>{resolving?<LoaderCircle className="animate-spin" size={15}/>:<Search size={15}/>} {resolving?t("Шукаємо…"):t("Знайти координати")}</button></div><small>{t("Назви позасонячних об’єктів шукаються через каталоги SIMBAD/NED. Для зір SIMBAD власний рух підставляється автоматично; для рухомих тіл Сонячної системи оберіть «Рухома ціль».")}</small>{resolvedTarget&&<div className="resolved-target" role="status"><strong>{resolvedTarget.canonical_name}</strong><span>RA {resolvedTarget.ra.toFixed(6)}° · Dec {resolvedTarget.dec.toFixed(6)}°</span><small>{resolvedTarget.resolver} · {resolvedTarget.service}{resolvedTarget.reference_position?` · ref. ${resolvedTarget.reference_position}`:""}. {resolvedTarget.proper_motion?t("Каталожні координати епохи J2000 і власний рух SIMBAD; позиція поширюється на час кожного кадру."):t("Каталожні координати; служба не повернула власного руху.")} {t("Це не виявлення SPHEREx.")}</small></div>}</div>
+          <div className="coordinate-fields"><label><span>RA <small>{t("пряме піднесення · 0–360°")}</small></span><Input name="ra" type="number" step="any" min="0" max="359.999999999" value={ra} onChange={e=>{setRa(e.target.value);setPlace("custom");setResolvedTarget(null);setTargetName("");}} required={place!=="moving"} disabled={busy||resolving||place==="moving"} placeholder={t("Напр. 167.2")}/></label><label><span>Dec <small>{t("схилення · −90–+90°")}</small></span><Input name="dec" type="number" step="any" min="-90" max="90" value={dec} onChange={e=>{setDec(e.target.value);setPlace("custom");setResolvedTarget(null);setTargetName("");}} required={place!=="moving"} disabled={busy||resolving||place==="moving"} placeholder={t("Напр. +5.15")}/></label></div>
           <div className="coordinate-fields motion-fields"><label><span>μα·cos δ <small>{t("власний рух · мас/рік")}</small></span><Input type="number" step="any" value={pmRa} onChange={e=>setPmRa(e.target.value)} disabled={busy||resolving||place==="moving"} placeholder={t("необов’язково")}/></label><label><span>μδ <small>{t("власний рух · мас/рік")}</small></span><Input type="number" step="any" value={pmDec} onChange={e=>setPmDec(e.target.value)} disabled={busy||resolving||place==="moving"} placeholder={t("необов’язково")}/></label><label><span>{t("Епоха")} <small>{t("юліанський рік координат")}</small></span><Input type="number" step="any" min="1900" max="2100" value={pmEpoch} onChange={e=>setPmEpoch(e.target.value)} disabled={busy||resolving||place==="moving"}/></label></div>
           {motionPreview&&<p className="motion-preview" role="status">{t("Власний рух застосовано")}: {start} → RA {motionPreview.now.ra.toFixed(6)}°, Dec {motionPreview.now.dec.toFixed(6)}° · {t("зсув від епохи")} J{pmEpoch}: {motionPreview.shift.toFixed(1)}″. {t("Кожен кадр центрується на позиції, поширеній до його DATE-AVG; паралакс не враховано.")}</p>}
         </section>
         {place==="moving"&&<div className="ephemeris-import">
-          <div className="motion-mode-switch" role="group" aria-label="Джерело орбіти рухомої цілі"><button type="button" className={motionMode==="most"?"selected":""} disabled={busy||resolving} aria-pressed={motionMode==="most"} onClick={()=>{setMotionMode("most");setError("");}}>IRSA MOST · відомий об’єкт</button><button type="button" className={motionMode==="horizons"?"selected":""} disabled={busy||resolving} aria-pressed={motionMode==="horizons"} onClick={()=>{setMotionMode("horizons");setError("");}}>Імпорт ефемериди Horizons</button></div>
-          {motionMode==="most"&&<div className="most-search"><label htmlFor="most-target">Назва або NAIF ID тіла</label><Input id="most-target" value={mostName} onChange={e=>setMostName(e.target.value)} disabled={busy} placeholder="Напр. 20000004 або 4 Vesta"/><small>MOST обчислює орбіту відомого об’єкта й повертає SPHEREx-зображення, що його охоплюють. Запит MOST охоплює до 90 діб; довші періоди діляться автоматично.</small><a className="text-link" href="https://irsa.ipac.caltech.edu/applications/MOST/" target="_blank" rel="noreferrer">Про Moving Object Search Tool ↗</a></div>}
+          <div className="motion-mode-switch" role="group" aria-label={t("Джерело орбіти рухомої цілі")}><button type="button" className={motionMode==="most"?"selected":""} disabled={busy||resolving} aria-pressed={motionMode==="most"} onClick={()=>{setMotionMode("most");setError("");}}>{t("IRSA MOST · відомий об’єкт")}</button><button type="button" className={motionMode==="horizons"?"selected":""} disabled={busy||resolving} aria-pressed={motionMode==="horizons"} onClick={()=>{setMotionMode("horizons");setError("");}}>{t("Імпорт ефемериди Horizons")}</button></div>
+          {motionMode==="most"&&<div className="most-search"><label htmlFor="most-target">{t("Назва або NAIF ID тіла")}</label><Input id="most-target" value={mostName} onChange={e=>setMostName(e.target.value)} disabled={busy} placeholder={t("Напр. 20000004 або 4 Vesta")}/><small>{t("MOST обчислює орбіту відомого об’єкта й повертає SPHEREx-зображення, що його охоплюють. Запит MOST охоплює до 90 діб; довші періоди діляться автоматично.")}</small><a className="text-link" href="https://irsa.ipac.caltech.edu/applications/MOST/" target="_blank" rel="noreferrer">{t("Про Moving Object Search Tool ↗")}</a></div>}
           {motionMode==="horizons"&&<>
-          <label htmlFor="horizons-name">Назва рухомої цілі</label>
-          <Input id="horizons-name" value={ephemeris?.target_name??""} readOnly disabled={busy} placeholder="Буде прочитана з файлу Horizons"/>
-          <label htmlFor="horizons-file">Імпортувати результат Horizons (.txt)
+          <label htmlFor="horizons-name">{t("Назва рухомої цілі")}</label>
+          <Input id="horizons-name" value={ephemeris?.target_name??""} readOnly disabled={busy} placeholder={t("Буде прочитана з файлу Horizons")}/>
+          <label htmlFor="horizons-file">{t("Імпортувати результат Horizons (.txt)")}
             <input id="horizons-file" type="file" accept=".txt,text/plain" disabled={busy} onChange={e=>{void importEphemeris(e.currentTarget.files?.[0]);e.currentTarget.value="";}}/>
           </label>
-          {ephemeris&&<div className="resolved-target" role="status"><strong>{ephemeris.target_name}</strong><span>{ephemeris.points.length} позицій · {mjdToIso(ephemeris.points[0].mjd).slice(0,10)} — {mjdToIso(ephemeris.points.at(-1)!.mjd).slice(0,10)} UTC</span><small>Earth geocenter · ICRF · координати інтерполюються до DATE-AVG FITS. SHA-256 {ephemeris.source_sha256.slice(0,16)}…</small></div>}
-          <small>Файл читається локально в браузері. До запиту переходять розібрані координати; у паспорті збережено їх і хеш, не сам файл. Траєкторія має вміститися у вибране поле зору.</small>
-          <details className="horizons-guide"><summary>Як завантажити таблицю з JPL Horizons</summary>
-            <ol><li>Відкрийте <a href="https://ssd.jpl.nasa.gov/horizons/app.html" target="_blank" rel="noreferrer">офіційний JPL Horizons ↗</a> і виберіть тип <b>Observer Table</b> та ціль.</li><li>Задайте спостерігача <b>Earth geocenter (500)</b>, інтервал від дати «Від» до наступної доби після «До» і шкалу UT.</li><li>Залиште ICRF RA/Dec та календарний час, вимкніть фільтри видимості, згенеруйте таблицю й натисніть <b>Download Results</b>.</li></ol>
-            <p>Крок ефемериди має відповідати швидкості руху; довгі проміжки знижують точність інтерполяції. Для близьких тіл геоцентричний прогноз може відрізнятися від позиції зі SPHEREx через паралакс.</p>
+          {ephemeris&&<div className="resolved-target" role="status"><strong>{ephemeris.target_name}</strong><span>{ephemeris.points.length} {t("позицій ·")} {mjdToIso(ephemeris.points[0].mjd).slice(0,10)} — {mjdToIso(ephemeris.points.at(-1)!.mjd).slice(0,10)} UTC</span><small>{t("Earth geocenter · ICRF · координати інтерполюються до DATE-AVG FITS. SHA-256")} {ephemeris.source_sha256.slice(0,16)}…</small></div>}
+          <small>{t("Файл читається локально в браузері. До запиту переходять розібрані координати; у паспорті збережено їх і хеш, не сам файл. Траєкторія має вміститися у вибране поле зору.")}</small>
+          <details className="horizons-guide"><summary>{t("Як завантажити таблицю з JPL Horizons")}</summary>
+            <ol><li>{t("Відкрийте")} <a href="https://ssd.jpl.nasa.gov/horizons/app.html" target="_blank" rel="noreferrer">{t("офіційний JPL Horizons ↗")}</a> {t("і виберіть тип")} <b>Observer Table</b> {t("та ціль.")}</li><li>{t("Задайте спостерігача")} <b>Earth geocenter (500)</b>{t(", інтервал від дати «Від» до наступної доби після «До» і шкалу UT.")}</li><li>{t("Залиште ICRF RA/Dec та календарний час, вимкніть фільтри видимості, згенеруйте таблицю й натисніть")} <b>Download Results</b>.</li></ol>
+            <p>{t("Крок ефемериди має відповідати швидкості руху; довгі проміжки знижують точність інтерполяції. Для близьких тіл геоцентричний прогноз може відрізнятися від позиції зі SPHEREx через паралакс.")}</p>
           </details>
           </>}
         </div>}
         <section className="search-step"><div className="step-heading"><span>2</span><div><strong>{t("Період спостережень")}</strong><small>{t("День початку й завершення за UTC")}</small></div></div><div className="date-fields"><label>{t("Від")}<Input name="start" type="date" value={start} onChange={e=>setStart(e.target.value)} required={mode==="series"} disabled={busy}/></label><label>{t("До · включно")}<Input name="end" type="date" value={end} onChange={e=>setEnd(e.target.value)} required={mode==="series"} disabled={busy}/></label></div></section>
-        <details className="advanced-search" open={advanced} onToggle={e=>setAdvanced(e.currentTarget.open)}><summary>{t("Наукові параметри")} <span>{release.toUpperCase()} · {place==="moving"&&motionMode==="most"?"IRSA MOST":survey==="deep"?"Deep":"Wide"} · D{detector}</span></summary><p>{place==="moving"&&motionMode==="most"?"IRSA MOST повертає власні SPHEREx-збіги. Перемикач Wide/Deep тут не застосовується; продукти відбираються за релізом і детектором.":"DR1 і QR3 — окремі релізи: перевіряйте обидва для потрібного періоду. QR2 більше не доступний для нового пошуку; збережені серії відкриваються без зміни релізу."}</p>
-          <div className="advanced-grid"><div className="form-choice"><label htmlFor="archive-release">{t("Реліз продуктів")}</label><Select value={release} onValueChange={setRelease} disabled={busy}><SelectTrigger id="archive-release"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="dr1">DR1 · основний випуск</SelectItem><SelectItem value="qr3">QR3 · новіший випуск</SelectItem></SelectContent></Select></div><div className="form-choice"><label htmlFor="archive-survey">{t("Тип огляду")}</label><Select value={place==="moving"&&motionMode==="most"?"most":survey} onValueChange={setSurvey} disabled={busy||(place==="moving"&&motionMode==="most")}><SelectTrigger id="archive-survey"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="wide">Wide Survey</SelectItem><SelectItem value="deep">Deep Survey</SelectItem><SelectItem value="most">IRSA MOST · рухомі цілі</SelectItem></SelectContent></Select></div>
-        {mode==="series"&&<><div className="form-choice"><label htmlFor="detector">{t("Детектор")}</label><Select value={detector} onValueChange={setDetector} disabled={busy}><SelectTrigger id="detector"><SelectValue/></SelectTrigger><SelectContent>{[1,2,3,4,5,6].map(d=><SelectItem value={String(d)} key={d}>D{d}</SelectItem>)}</SelectContent></Select></div><label>{t("Поле зору · градуси")}<Input name="fov" type="number" step="any" min="0.03" max="0.3" value={fov} onChange={e=>setFov(e.target.value)} required disabled={busy}/><small>Допустимий діапазон цієї версії: 0,03–0,30°.</small></label><div className="wavelength-fields"><span>{t("Спектральний інтервал · мкм")}</span><div><Input aria-label="Мінімальна центральна довжина хвилі, мкм" name="wavelength_min" type="number" min="0.01" step="any" placeholder="Від — необов’язково" value={wavelengthMin} onChange={e=>setWavelengthMin(e.target.value)} disabled={busy}/><Input aria-label="Максимальна центральна довжина хвилі, мкм" name="wavelength_max" type="number" min="0.01" step="any" placeholder="До — необов’язково" value={wavelengthMax} onChange={e=>setWavelengthMax(e.target.value)} disabled={busy}/></div><small>Це оглядовий фільтр приблизної довжини хвилі в центрі поля, а не зіставлення спектральних відгуків.</small></div><p className="form-explanation">Обробляються всі знайдені збіги без вибірки моментів часу. Якщо відповідь архіву завелика або IRSA MOST вимагає коротших вікон, інтервал автоматично ділиться на неперекривні UTC-частини; результати зводяться в одну серію до {MAX_SERIES_FRAMES} кадрів, а URL і SHA‑256 частин зберігаються в паспорті. Кадри, що не проходять перевірки FITS/WCS чи спектрального діапазону, буде окремо зазначено.</p></>}</div>
+        <details className="advanced-search" open={advanced} onToggle={e=>setAdvanced(e.currentTarget.open)}><summary>{t("Наукові параметри")} <span>{release.toUpperCase()} · {place==="moving"&&motionMode==="most"?"IRSA MOST":survey==="deep"?"Deep":"Wide"} · D{detector}</span></summary><p>{place==="moving"&&motionMode==="most"?t("IRSA MOST повертає власні SPHEREx-збіги. Перемикач Wide/Deep тут не застосовується; продукти відбираються за релізом і детектором."):t("DR1 і QR3 — окремі релізи: перевіряйте обидва для потрібного періоду. QR2 більше не доступний для нового пошуку; збережені серії відкриваються без зміни релізу.")}</p>
+          <div className="advanced-grid"><div className="form-choice"><label htmlFor="archive-release">{t("Реліз продуктів")}</label><Select value={release} onValueChange={setRelease} disabled={busy}><SelectTrigger id="archive-release"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="dr1">{t("DR1 · основний випуск")}</SelectItem><SelectItem value="qr3">{t("QR3 · новіший випуск")}</SelectItem></SelectContent></Select></div><div className="form-choice"><label htmlFor="archive-survey">{t("Тип огляду")}</label><Select value={place==="moving"&&motionMode==="most"?"most":survey} onValueChange={setSurvey} disabled={busy||(place==="moving"&&motionMode==="most")}><SelectTrigger id="archive-survey"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="wide">Wide Survey</SelectItem><SelectItem value="deep">Deep Survey</SelectItem><SelectItem value="most">{t("IRSA MOST · рухомі цілі")}</SelectItem></SelectContent></Select></div>
+        {mode==="series"&&<><div className="form-choice"><label htmlFor="detector">{t("Детектор")}</label><Select value={detector} onValueChange={setDetector} disabled={busy}><SelectTrigger id="detector"><SelectValue/></SelectTrigger><SelectContent>{[1,2,3,4,5,6].map(d=><SelectItem value={String(d)} key={d}>D{d}</SelectItem>)}</SelectContent></Select></div><label>{t("Поле зору · градуси")}<Input name="fov" type="number" step="any" min="0.03" max="0.3" value={fov} onChange={e=>setFov(e.target.value)} required disabled={busy}/><small>{t("Допустимий діапазон цієї версії: 0,03–0,30°.")}</small></label><div className="wavelength-fields"><span>{t("Спектральний інтервал · мкм")}</span><div><Input aria-label={t("Мінімальна центральна довжина хвилі, мкм")} name="wavelength_min" type="number" min="0.01" step="any" placeholder={t("Від — необов’язково")} value={wavelengthMin} onChange={e=>setWavelengthMin(e.target.value)} disabled={busy}/><Input aria-label={t("Максимальна центральна довжина хвилі, мкм")} name="wavelength_max" type="number" min="0.01" step="any" placeholder={t("До — необов’язково")} value={wavelengthMax} onChange={e=>setWavelengthMax(e.target.value)} disabled={busy}/></div><small>{t("Це оглядовий фільтр приблизної довжини хвилі в центрі поля, а не зіставлення спектральних відгуків.")}</small></div><p className="form-explanation">{t("Обробляються всі знайдені збіги без вибірки моментів часу. Якщо відповідь архіву завелика або IRSA MOST вимагає коротших вікон, інтервал автоматично ділиться на неперекривні UTC-частини; результати зводяться в одну серію до {0} кадрів, а URL і SHA‑256 частин зберігаються в паспорті. Кадри, що не проходять перевірки FITS/WCS чи спектрального діапазону, буде окремо зазначено.", MAX_SERIES_FRAMES)}</p></>}</div>
         </details>
-        <button className="button search-submit" type="submit" disabled={busy||resolving}>{busy?<LoaderCircle className="animate-spin" size={17}/>:<Search size={17}/>} {busy?"Перевіряємо архів і готуємо кадри…":mode==="series"?"Показати часову серію":"Знайти експозиції"}</button>
+        <button className="button search-submit" type="submit" disabled={busy||resolving}>{busy?<LoaderCircle className="animate-spin" size={17}/>:<Search size={17}/>} {busy?t("Перевіряємо архів і готуємо кадри…"):mode==="series"?t("Показати часову серію"):t("Знайти експозиції")}</button>
       </form>
-      {busy&&progress&&<div className="job-progress" role="status"><strong>{progress.detail}</strong>{progress.total>0&&<Progress value={progress.completed/progress.total*100} aria-label="Оброблено кадрів"/>}{selection&&<p>{selection}</p>}<p>Після отримання каталогу прогрес зберігається локально. Закриття цього вікна або вкладки призупиняє обчислення; його можна продовжити. Для серій до 120 кадрів точний розрахунок шкали починається повторно.</p>{progress.storage&&<p>За оцінкою браузера вільно {(progress.storage.free_bytes/1048576).toFixed(0)} MiB{progress.storage.estimated_remaining_bytes!==null?`; прогноз решти PNG: ${(progress.storage.estimated_remaining_bytes/1048576).toFixed(0)} MiB`:""}. Це приблизні значення.{progress.storage.estimated_remaining_bytes!==null&&progress.storage.estimated_remaining_bytes>progress.storage.free_bytes&&" Очікуваний обсяг перевищує вільне місце. Призупиніть і видаліть непотрібні серії в бібліотеці."}</p>}{progress.stage!=="save"&&<div className="checkpoint-actions"><button className="button" onClick={()=>{stop();setProgress(null);void refreshCheckpoints();setError("Обчислення призупинено. Контрольна точка збережена.");}}>{t("Призупинити")}</button><button className="button" onClick={async()=>{const id=assetSeries.current;stop();setProgress(null);try{if(id)await deleteProcessingCheckpoint(id);await refreshCheckpoints();setError("Підготовку скасовано; її проміжні дані видалено. Збережені сесії залишились у бібліотеці.");}catch(e){setError(e instanceof Error?e.message:"Не вдалося видалити контрольну точку.");}}}>{t("Скасувати й видалити")}</button></div>}</div>}
-      {checkpoints.length>0&&!busy&&<section className="processing-checkpoints" aria-label="Незавершені обчислення"><h3>{t("Збережені обчислення")}</h3><p>Відновлення використовує початковий каталог і версію методу. Зміни форми вище не змінюють збережений запит.</p>{checkpoints.map(checkpoint=><article key={checkpoint.id} className="processing-checkpoint"><strong>{checkpoint.release.toUpperCase()} · {checkpoint.survey} · D{checkpoint.detector} · {checkpoint.total} записів</strong><p>RA {checkpoint.ra}° · Dec {checkpoint.dec}° · {checkpoint.start} — {checkpoint.end} UTC</p><small>{checkpoint.phase==="complete"?"Обробку завершено; очікує збереження сесії":checkpoint.phase==="render"?`PNG: ${checkpoint.rendered}; перевірено ${checkpoint.analyzed}`:checkpoint.phase==="legacy"?"Відновлення повторить точний розрахунок невеликої серії":`Перевірено: ${checkpoint.analyzed} із ${checkpoint.total}`} · {checkpoint.updatedAt?.slice(0,19).replace("T"," ")} UTC</small>{checkpoint.error&&<p className="detail-note">{checkpoint.error.split("\n").filter(Boolean).at(-1)}</p>}<div className="checkpoint-actions"><button className="button" disabled={busy||resolving} onClick={()=>resumeCheckpoint(checkpoint)}>{checkpoint.phase==="complete"?"Зберегти й відкрити":"Продовжити"}</button><button className="button" disabled={busy} onClick={()=>void removeCheckpoint(checkpoint.id)}>Видалити обчислення</button></div></article>)}</section>}
-      {error&&<p className="error-message" role="alert">{error}</p>}{excluded.length>0&&<details className="excluded-frames"><summary>Відхилені кадри: {excluded.length}</summary>{excluded.map((f,i)=><p key={i}><code>{f.id}</code><br/>{f.reason.split("\n").filter(Boolean).at(-1)}</p>)}</details>}
-      {result&&<div className="archive-results"><div className="results-summary" role="status"><strong>{result.records.length?`Знайдено записів: ${result.records.length}`:"Спостережень у цій вибірці немає"}</strong><span>RA {result.query.ra}° · Dec {result.query.dec}°</span></div>{result.truncated&&<p className="limit-notice">Показано до 60 записів. Звузьте дати для повнішого перегляду.</p>}{result.records.length>0&&<Table><TableHeader><TableRow><TableHead>Початок · UTC</TableHead><TableHead>{t("Детектор")}</TableHead><TableHead>{t("Експозиція")}</TableHead><TableHead>Джерело</TableHead></TableRow></TableHeader><TableBody>{result.records.map((r,i)=><TableRow key={`${r.id}-${i}`}><TableCell><time>{mjdToIso(r.mjd).slice(0,19).replace("T"," ")}</time><small className="record-id">{r.observation}</small></TableCell><TableCell>{r.band||"—"}</TableCell><TableCell>{r.exposure_s==null?"—":`${r.exposure_s.toFixed(1)} с`}</TableCell><TableCell><a className="text-link" href={r.url} target="_blank" rel="noreferrer">FITS <ArrowUpRight size={14}/></a></TableCell></TableRow>)}</TableBody></Table>}<a className="text-link" href={result.source_url} target="_blank" rel="noreferrer">Запит IRSA (VOTable) <ArrowUpRight size={15}/></a><p className="detail-note">Отримано {result.retrieved_at.slice(0,19).replace("T"," ")} UTC. Перетин поля не гарантує корисного сигналу.</p></div>}
+      {busy&&progress&&<div className="job-progress" role="status"><strong>{t(progress.detail)}</strong>{progress.total>0&&<Progress value={progress.completed/progress.total*100} aria-label={t("Оброблено кадрів")}/>}{selection&&<p>{selection}</p>}<p>{t("Після отримання каталогу прогрес зберігається локально. Закриття цього вікна або вкладки призупиняє обчислення; його можна продовжити. Для серій до 120 кадрів точний розрахунок шкали починається повторно.")}</p>{progress.storage&&<p>{t("За оцінкою браузера вільно")} {(progress.storage.free_bytes/1048576).toFixed(0)} MiB{progress.storage.estimated_remaining_bytes!==null?t("; прогноз решти PNG: {0} MiB", (progress.storage.estimated_remaining_bytes/1048576).toFixed(0)):""}{t(". Це приблизні значення.")}{progress.storage.estimated_remaining_bytes!==null&&progress.storage.estimated_remaining_bytes>progress.storage.free_bytes&&t(" Очікуваний обсяг перевищує вільне місце. Призупиніть і видаліть непотрібні серії в бібліотеці.")}</p>}{progress.stage!=="save"&&<div className="checkpoint-actions"><button className="button" onClick={()=>{stop();setProgress(null);void refreshCheckpoints();setError(t("Обчислення призупинено. Контрольна точка збережена."));}}>{t("Призупинити")}</button><button className="button" onClick={async()=>{const id=assetSeries.current;stop();setProgress(null);try{if(id)await deleteProcessingCheckpoint(id);await refreshCheckpoints();setError(t("Підготовку скасовано; її проміжні дані видалено. Збережені сесії залишились у бібліотеці."));}catch(e){setError(e instanceof Error?e.message:t("Не вдалося видалити контрольну точку."));}}}>{t("Скасувати й видалити")}</button></div>}</div>}
+      {checkpoints.length>0&&!busy&&<section className="processing-checkpoints" aria-label={t("Незавершені обчислення")}><h3>{t("Збережені обчислення")}</h3><p>{t("Відновлення використовує початковий каталог і версію методу. Зміни форми вище не змінюють збережений запит.")}</p>{checkpoints.map(checkpoint=><article key={checkpoint.id} className="processing-checkpoint"><strong>{checkpoint.release.toUpperCase()} · {checkpoint.survey} · D{checkpoint.detector} · {checkpoint.total} {t("записів")}</strong><p>RA {checkpoint.ra}° · Dec {checkpoint.dec}° · {checkpoint.start} — {checkpoint.end} UTC</p><small>{checkpoint.phase==="complete"?t("Обробку завершено; очікує збереження сесії"):checkpoint.phase==="render"?t("PNG: {0}; перевірено {1}", checkpoint.rendered, checkpoint.analyzed):checkpoint.phase==="legacy"?t("Відновлення повторить точний розрахунок невеликої серії"):t("Перевірено: {0} із {1}", checkpoint.analyzed, checkpoint.total)} · {checkpoint.updatedAt?.slice(0,19).replace("T"," ")} UTC</small>{checkpoint.error&&<p className="detail-note">{t(checkpoint.error.split("\n").filter(Boolean).at(-1)??"")}</p>}<div className="checkpoint-actions"><button className="button" disabled={busy||resolving} onClick={()=>resumeCheckpoint(checkpoint)}>{checkpoint.phase==="complete"?t("Зберегти й відкрити"):t("Продовжити")}</button><button className="button" disabled={busy} onClick={()=>void removeCheckpoint(checkpoint.id)}>{t("Видалити обчислення")}</button></div></article>)}</section>}
+      {error&&<p className="error-message" role="alert">{t(error)}</p>}{excluded.length>0&&<details className="excluded-frames"><summary>{t("Відхилені кадри:")} {excluded.length}</summary>{excluded.map((f,i)=><p key={i}><code>{f.id}</code><br/>{t(f.reason.split("\n").filter(Boolean).at(-1)??"")}</p>)}</details>}
+      {result&&<div className="archive-results"><div className="results-summary" role="status"><strong>{result.records.length?t("Знайдено записів: {0}", result.records.length):t("Спостережень у цій вибірці немає")}</strong><span>RA {result.query.ra}° · Dec {result.query.dec}°</span></div>{result.truncated&&<p className="limit-notice">{t("Показано до 60 записів. Звузьте дати для повнішого перегляду.")}</p>}{result.records.length>0&&<Table><TableHeader><TableRow><TableHead>{t("Початок · UTC")}</TableHead><TableHead>{t("Детектор")}</TableHead><TableHead>{t("Експозиція")}</TableHead><TableHead>{t("Джерело")}</TableHead></TableRow></TableHeader><TableBody>{result.records.map((r,i)=><TableRow key={`${r.id}-${i}`}><TableCell><time>{mjdToIso(r.mjd).slice(0,19).replace("T"," ")}</time><small className="record-id">{r.observation}</small></TableCell><TableCell>{r.band||"—"}</TableCell><TableCell>{r.exposure_s==null?"—":`${r.exposure_s.toFixed(1)} ${t("с")}`}</TableCell><TableCell><a className="text-link" href={r.url} target="_blank" rel="noreferrer">FITS <ArrowUpRight size={14}/></a></TableCell></TableRow>)}</TableBody></Table>}<a className="text-link" href={result.source_url} target="_blank" rel="noreferrer">{t("Запит IRSA (VOTable)")} <ArrowUpRight size={15}/></a><p className="detail-note">{t("Отримано")} {result.retrieved_at.slice(0,19).replace("T"," ")} {t("UTC. Перетин поля не гарантує корисного сигналу.")}</p></div>}
     </DialogContent>
   </Dialog>;
 }

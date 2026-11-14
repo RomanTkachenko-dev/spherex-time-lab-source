@@ -7,3 +7,4 @@
 .observatory-embed .edition,.observatory-embed .footer{display:none}
 .observatory-embed .sky-atlas{margin:8px}
 @media(max-width:850px){.atlas-canvas{height:clamp(430px,68dvh,680px)}}
+.atlas-share{display:grid;gap:9px;padding-top:12px;border-top:1px solid #26313a}.atlas-share-title{font-size:13px;color:#dce3e7}.atlas-share-option{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#c9d2d9}.atlas-share .button{display:inline-flex;align-items:center;justify-content:center;gap:6px}.atlas-share details{display:grid;gap:8px;font-size:13px}.atlas-share details label{display:grid;gap:5px;margin-top:8px}.atlas-share input[readonly],.atlas-share textarea{width:100%;padding:7px 9px;border:1px solid #39444c;border-radius:5px;background:#0b1015;color:#d6dee4;font-family:Consolas,monospace;font-size:12px;resize:vertical}

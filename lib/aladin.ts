@@ -6,7 +6,7 @@ export type SkyViewer = {
   getRaDec(): [number, number]; getFov(): [number, number]; setFoV(degrees: number): void;
   addOverlay(overlay: SkyOverlay): void;
   setBaseImageLayer(layer: SkyImage | string): unknown;
-  on(event: "positionChanged" | "click", callback: (event: { ra: number; dec: number; isDragging?: boolean }) => void): void;
+  on(event: "positionChanged" | "click" | "zoomChanged", callback: (event: { ra: number; dec: number; isDragging?: boolean }) => void): void;
   remove(): void;
 };
 export type AladinApi = {

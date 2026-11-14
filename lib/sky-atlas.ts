@@ -53,6 +53,34 @@ export function readAtlasLink(params: URLSearchParams) {
     survey: params.get("survey") === "deep" ? "deep" as const : "wide" as const,
     fov: fov >= .03 && fov <= 180 ? fov : coordinates ? 8 : 180,
     search: params.get("search") === "1" && !!coordinates && !!start && !!end && end >= start,
+    series: params.get("series") === "1" && !!coordinates && !!start && !!end && end >= start,
     embed: params.get("embed") === "1",
   };
+}
+
+export type AtlasLinkState = {
+  ra: number; dec: number; fov: number; start: string; end: string; detector: number;
+  release: "qr2" | "qr3" | "dr1"; survey: "wide" | "deep"; language: "en" | "uk";
+  search?: boolean; series?: boolean; embed?: boolean;
+};
+/** Shareable URL for the current view; `base` keeps origin and path (GitHub Pages or server). */
+export function buildAtlasLink(base: string, state: AtlasLinkState): string {
+  const url = new URL(base);
+  url.search = ""; url.hash = "";
+  const params = url.searchParams;
+  const ra = Number((((state.ra % 360) + 360) % 360).toFixed(6));
+  params.set("ra", String(ra >= 360 ? 0 : ra));
+  params.set("dec", String(Number(state.dec.toFixed(6))));
+  params.set("fov", String(Number(state.fov.toPrecision(4))));
+  params.set("start", state.start); params.set("end", state.end);
+  params.set("release", state.release); params.set("survey", state.survey);
+  params.set("detector", String(state.detector)); params.set("lang", state.language);
+  if (state.search) params.set("search", "1");
+  if (state.series) params.set("series", "1");
+  if (state.embed) params.set("embed", "1");
+  return url.toString();
+}
+export function embedCode(link: string) {
+  const src = link.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  return `<iframe title="SPHEREx Time Lab" src="${src}" width="100%" height="850" loading="lazy" allow="clipboard-write"></iframe>`;
 }

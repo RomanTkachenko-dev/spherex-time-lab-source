@@ -45,7 +45,10 @@ Use decimal ICRS degrees, RA in [0, 360) and Dec in [-90, 90].
 Supported options: `lang=en|uk`, `ra`, `dec`, `fov` (map degrees),
 `start`, `end` (ISO UTC dates), `detector=1..6`, `release=dr1|qr3`,
 `survey=wide|deep`, and `embed=1` for a compact layout.
-Add `search=1` with valid coordinates and both dates to run the coverage query on load.
+Add `search=1` with valid coordinates and both dates to run the coverage query on load,
+or `series=1` to build that field's SPHEREx time series straight away (needs the live API).
+The address bar follows the map as you move it, and **Share this view** under the globe
+copies the link or a ready `<iframe>` snippet.
 
 Example iframe:
 
