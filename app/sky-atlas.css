@@ -8,3 +8,4 @@
 .observatory-embed .sky-atlas{margin:8px}
 @media(max-width:850px){.atlas-canvas{height:clamp(430px,68dvh,680px)}}
 @media(max-width:480px){.atlas-controls>label{grid-column:1/-1}}
+.sky-atlas .atlas-primary:hover:not(:disabled){background:#d8fba3;color:#182411}.sky-atlas .atlas-primary:active:not(:disabled){background:#b2e464}.sky-atlas .atlas-primary:focus-visible{outline:2px solid #eef3e9;outline-offset:2px}.sky-atlas .atlas-primary:disabled{background:#3b4733;color:#c9d3bf;opacity:1;cursor:not-allowed}
