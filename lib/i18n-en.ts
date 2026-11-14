@@ -1,5 +1,6 @@
 /** English for Ukrainian source strings (UI, API errors, worker and pipeline messages). Generated from a reviewed list; edit freely. */
 export const ENGLISH: Record<string, string> = {
+  "Забагато запитів до архіву з цієї адреси. Зачекайте хвилину й повторіть.": "Too many archive requests from this address. Wait a minute and try again.",
   "Після отримання каталогу прогрес зберігається локально. Закриття цього вікна або вкладки призупиняє обчислення; його можна продовжити. Для серій до 120 кадрів точний розрахунок шкали починається повторно.": "Progress is saved locally once the catalogue is received. Closing this dialog or tab pauses the computation; you can resume it. For series up to 120 frames the exact scale calculation starts again.",
   "Вибірка містить до 1200 джерел із виміряною зоряною величиною G, упорядкованих за її зростанням. Координати поширюються сталою власного руху з епохи ref_epoch; якщо компоненти руху відсутні, показується початкова каталожна позиція. У моделі не застосовано паралакс, променеву швидкість або коваріації. Символи показують каталожні позиції Gaia, а не виявлення SPHEREx чи астрометричне вимірювання цього конвеєра.": "The sample holds up to 1200 sources with a measured G magnitude, ordered by brightness. Coordinates are propagated with constant proper motion from ref_epoch; where motion components are missing, the original catalogue position is shown. Parallax, radial velocity and covariances are not applied. Symbols mark Gaia catalogue positions, not SPHEREx detections or astrometric measurements by this pipeline.",
   " мкм; ": " µm; ",
@@ -718,6 +719,7 @@ export const ENGLISH: Record<string, string> = {
 
 /** Messages with values. Each pattern matches the whole text; $1… are translated recursively. */
 export const ENGLISH_PATTERNS: [RegExp, string][] = [
+  [new RegExp("^IRSA тимчасово недоступний; повторна спроба (\\d+)/(\\d+) через (\\d+) с…$", "u"), "IRSA is temporarily unavailable; retry $1/$2 in $3 s…"],
   [new RegExp("^Не вдалося отримати FITS-вирізку \\(HTTP (\\d+)\\)\\.$", "u"), "Could not get the FITS cutout (HTTP $1)."],
   [new RegExp("^Перевірка (\\d+) із (\\d+): FITS, WCS і межі спільної шкали$", "u"), "Checking $1 of $2: FITS, WCS and shared scale limits"],
   [new RegExp("^Перевірено (\\d+) із (\\d+); придатних (\\d+), відхилено (\\d+)$", "u"), "Checked $1 of $2; usable $3, rejected $4"],

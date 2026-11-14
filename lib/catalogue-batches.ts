@@ -45,11 +45,16 @@ export async function collectCatalogueParts<T extends CatalogueRecord, B extends
   movingObject,
   request,
   onProgress,
+  unavailableRetryDelaysMs,
+  sleep,
 }: {
   interval: DateInterval;
   movingObject: boolean;
   request: (interval: DateInterval) => Promise<{ status: number; ok: boolean; body: B }>;
   onProgress?: (progress: { completed: number; total: number; detail: string }) => void;
+  /** Extra waits after the server's own retries when the archive stays unavailable (HTTP 502/503). */
+  unavailableRetryDelaysMs?: number[];
+  sleep?: (ms: number) => Promise<void>;
 }): Promise<{ parts: CatalogueBatchPart<T, B>[]; records: T[] }> {
   const pending: DateInterval[] = [interval];
   const parts: CatalogueBatchPart<T, B>[] = [];
@@ -63,7 +68,13 @@ export async function collectCatalogueParts<T extends CatalogueRecord, B extends
       onProgress?.({ completed: parts.length, total: parts.length + pending.length, detail: `IRSA MOST приймає до ${MAX_MOST_INTERVAL_DAYS} діб за запит; автоматично ділю часовий інтервал…` });
       continue;
     }
-    const response = await request(current);
+    let response = await request(current);
+    const delays = unavailableRetryDelaysMs ?? [4000, 10000];
+    for (let retry = 0; retry < delays.length && (response.status === 502 || response.status === 503) && (response.body as { retryable?: boolean }).retryable !== false; retry++) {
+      onProgress?.({ completed: parts.length, total: parts.length + pending.length + 1, detail: `IRSA тимчасово недоступний; повторна спроба ${retry + 1}/${delays.length} через ${Math.round(delays[retry] / 1000)} с…` });
+      await (sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms))))(delays[retry]);
+      response = await request(current);
+    }
     if (response.status === 413) {
       if (!halves) throw Error(`${response.body.error || "Архівна відповідь перевищила ліміт."} Навіть за одну UTC-добу збігів забагато для повного запиту; звузьте поле або додайте наукові фільтри.`);
       if (parts.length + pending.length + halves.length > MAX_CATALOGUE_PARTS) throw Error(`Пошук потребує понад ${MAX_CATALOGUE_PARTS} частин. Звузьте період і повторіть запит.`);

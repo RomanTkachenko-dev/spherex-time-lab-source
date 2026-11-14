@@ -137,3 +137,28 @@ $$EOE`;
   assert.ok(query.ra>=0&&query.ra<360);
   assert.throws(()=>validateFieldQuery({dec:0,start:"2025-12-14",end:"2025-12-14",detector:2,fov:0.03,max_frames:4,release:"qr2",survey:"wide",ephemeris:{source:"JPL Horizons",source_url:"https://ssd.jpl.nasa.gov/horizons/app.html",target_name:parsed.target_name,source_file_name:"target.txt",source_sha256:"a".repeat(64),observer:"Earth geocenter",frame:"ICRF",time_scale:"UTC",points:parsed.points}}));
 });
+
+test("catalogue collection waits out a longer archive outage but not rejections or timeouts", async () => {
+  type R = { id: string; observation: string; detector: number; mjd: number; url: string };
+  const ok = { status: 200, ok: true, body: { records: [{ id: "a", observation: "o", detector: 1, mjd: 1, url: "a" }] as R[] } };
+  const down = { status: 502, ok: false, body: { records: [] as R[], error: "IRSA down", retryable: true } };
+  const run = async (responses: { status: number; ok: boolean; body: { records: R[]; error?: string; retryable?: boolean } }[]) => {
+    const waits: number[] = [], details: string[] = []; let calls = 0;
+    const result = await collectCatalogueParts<R, { records: R[]; error?: string; retryable?: boolean }>({
+      interval: { start: "2025-12-14", end: "2025-12-14" }, movingObject: false, unavailableRetryDelaysMs: [4000, 10000],
+      sleep: async ms => { waits.push(ms); }, onProgress: p => details.push(p.detail),
+      request: async () => responses[Math.min(calls++, responses.length - 1)],
+    }).catch((error: Error) => error);
+    return { result, waits, details, calls };
+  };
+  const recovered = await run([down, down, ok]);
+  assert.ok(!(recovered.result instanceof Error) && recovered.result.records.length === 1);
+  assert.deepEqual(recovered.waits, [4000, 10000]); assert.equal(recovered.calls, 3);
+  assert.match(recovered.details[0], /повторна спроба 1\/2 через 4 с/);
+  const persistent = await run([down]);
+  assert.ok(persistent.result instanceof Error && persistent.result.message === "IRSA down"); assert.equal(persistent.calls, 3);
+  for (const response of [{ ...down, body: { ...down.body, retryable: false } }, { ...down, status: 504 }, { ...down, status: 400 }]) {
+    const once = await run([response]);
+    assert.ok(once.result instanceof Error); assert.equal(once.calls, 1, `status ${response.status} is not retried by the client`); assert.deepEqual(once.waits, []);
+  }
+});

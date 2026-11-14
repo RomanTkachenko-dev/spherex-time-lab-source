@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fetchIrsaCatalogue, IrsaCatalogueError, irsaCatalogueErrorResponse } from "../lib/irsa-catalogue.ts";
+import { fetchIrsaCatalogue, IRSA_ATTEMPTS, IrsaCatalogueError, irsaCatalogueErrorResponse, retryDelay } from "../lib/irsa-catalogue.ts";
 
 const xml = readFileSync(new URL("./fixtures/irsa-sia.vot", import.meta.url), "utf8");
 const url = "https://irsa.ipac.caltech.edu/SIA?POS=CIRCLE+167.2+5.15+0.000001&COLLECTION=spherex_qr2&MAXREC=1000&TIME=61023+61024";
@@ -20,7 +20,7 @@ test("IRSA transient gateway failure retries the identical query and preserves t
   assert.equal(result.parsed.rows.length, 30);
 });
 
-test("persistent gateway outage stops after two attempts and explains the service failure", async () => {
+test("persistent gateway outage stops after the bounded attempts and explains the service failure", async () => {
   let calls = 0;
   await assert.rejects(fetchIrsaCatalogue(url, { retryDelayMs: 0, fetcher: async () => {
     calls++; return new Response("private upstream HTML", { status: 502 });
@@ -32,7 +32,21 @@ test("persistent gateway outage stops after two attempts and explains the servic
     assert.doesNotMatch(error.message, /private upstream HTML/);
     return true;
   });
-  assert.equal(calls, 2);
+  assert.equal(calls, IRSA_ATTEMPTS);
+});
+
+test("a short burst of gateway errors is ridden out with growing, jittered pauses", async () => {
+  const statuses = [502, 503, 502];
+  let calls = 0;
+  const result = await fetchIrsaCatalogue(url, { retryDelayMs: 0, fetcher: async () => {
+    const status = statuses[calls++];
+    return status ? new Response("busy", { status }) : new Response(xml);
+  } });
+  assert.equal(calls, 4); assert.equal(result.parsed.rows.length, 30);
+  assert.deepEqual([1, 2, 3].map(attempt => retryDelay(attempt, 600, () => 0.5)), [600, 1320, 2904]);
+  assert.equal(retryDelay(1, 600, () => 0), 450); assert.equal(retryDelay(1, 600, () => 1), 750);
+  const worst = [1, 2, 3].reduce((sum, attempt) => sum + retryDelay(attempt, 600, () => 1), 0);
+  assert.ok(worst < 10_000, "all pauses fit well inside the 45 s deadline");
 });
 
 test("network failure may recover on the bounded retry", async () => {
