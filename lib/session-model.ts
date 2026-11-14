@@ -1,6 +1,11 @@
 import { validateManifest, type Manifest } from "./science.ts";
 
-export type SessionView = { frame_id: string; mode: "sky" | "object"; compare: boolean; reference_id: string | null; predicted_marker?: boolean; centre_marker?: boolean; quality_overlay?: boolean; gaia_enabled?: boolean };
+export type CompareMode = "side" | "blink" | "difference";
+export type DifferenceReference = "reference" | "median" | "previous";
+export const DIFFERENCE_SCALES = [2, 3, 5, 10] as const;
+export type SessionView = { frame_id: string; mode: "sky" | "object"; compare: boolean; reference_id: string | null; predicted_marker?: boolean; centre_marker?: boolean; quality_overlay?: boolean; gaia_enabled?: boolean;
+  /** Optional since 0.11; older sessions and bundles mean side-by-side comparison. */
+  compare_mode?: CompareMode; difference_reference?: DifferenceReference; difference_k?: number };
 export type SavedSession = { id: string; title: string; manifest: Manifest; view: SessionView; created_at: string; updated_at: string; asset_series_ids: string[] };
 export type SessionSummary = Omit<SavedSession, "manifest"> & { frame_count: number };
 
@@ -28,7 +33,10 @@ export function validateSessionViewShape(value: unknown): SessionView {
   const view = value as SessionView;
   const identifier = (value: unknown) => typeof value === "string" && value.length > 0 && value.length <= 1000;
   if (!view || !["sky", "object"].includes(view.mode) || typeof view.compare !== "boolean" || !identifier(view.frame_id) || (view.reference_id !== null && !identifier(view.reference_id)) || (view.compare && view.reference_id === null)) throw Error("Стан перегляду не відповідає кадрам сесії.");
-  return {frame_id: view.frame_id, mode: view.mode, compare: view.compare, reference_id: view.reference_id, predicted_marker: view.predicted_marker === true, centre_marker: view.centre_marker === true, quality_overlay: view.quality_overlay === true, gaia_enabled: view.gaia_enabled === true};
+  const compare_mode: CompareMode = view.compare_mode === "blink" || view.compare_mode === "difference" ? view.compare_mode : "side";
+  const difference_reference: DifferenceReference = view.difference_reference === "median" || view.difference_reference === "previous" ? view.difference_reference : "reference";
+  const difference_k = (DIFFERENCE_SCALES as readonly number[]).includes(Number(view.difference_k)) ? Number(view.difference_k) : 5;
+  return {frame_id: view.frame_id, mode: view.mode, compare: view.compare, reference_id: view.reference_id, predicted_marker: view.predicted_marker === true, centre_marker: view.centre_marker === true, quality_overlay: view.quality_overlay === true, gaia_enabled: view.gaia_enabled === true, compare_mode, difference_reference, difference_k};
 }
 
 export function validateSessionView(value: unknown, manifest: Manifest): SessionView {
