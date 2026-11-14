@@ -222,6 +222,10 @@ export const ukrainian: Record<string, string> = {
   "IRSA FITS cutout tutorial ↗": "Методика FITS-вирізок IRSA ↗",
   "Dataset DOI {release} ↗": "DOI набору {release} ↗",
 
+  "Official acknowledgement (required wording, kept in English):": "Офіційна подяка (обов’язкове формулювання англійською):",
+  // Translation of the standard SPHEREx acknowledgement stored in manifests (shown under the English original)
+  "This publication makes use of data products from the Spectro-Photometer for the History of the Universe, Epoch of Reionization and Ices Explorer (SPHEREx), which is a joint project of the Jet Propulsion Laboratory and the California Institute of Technology, and is funded by the National Aeronautics and Space Administration.": "Переклад: у цій публікації використано продукти даних SPHEREx (Spectro-Photometer for the History of the Universe, Epoch of Reionization and Ices Explorer) — спільного проєкту Лабораторії реактивного руху (JPL) та Каліфорнійського технологічного інституту (Caltech), що фінансується NASA.",
+
   // ── Session library ──────────────────────────────────────────────────────
   "Saved sessions": "Локальні сесії",
   "Could not read the library.": "Не вдалося прочитати бібліотеку.",
