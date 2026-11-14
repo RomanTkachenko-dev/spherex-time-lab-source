@@ -7,6 +7,7 @@ export type Frame = {
   mjd: number; exposure_s: number; detector: string; release: string;
   image: string; object_image: string; quality_mask_image?: string; object_quality_mask_image?: string; wavelength_um: number; bandwidth_um: number;
   display_asset_sha256?: Record<string,string>;
+  background?: FrameBackground;
   ra: number; dec: number; source_url: string; cutout_url: string; sha256_cutout: string;
   marker_sky: { x: number; y: number }; marker_sky_visible?: boolean; marker_object: { x: number; y: number };
   position_kind: string; measurement: null;
@@ -16,6 +17,10 @@ export type Frame = {
     finite_pixel_count?: number; finite_coverage_fraction?: number;
     target_finite_pixel_count?: number; target_finite_coverage_fraction?: number;
     usable_coverage_fraction?: number; median_psf_fwhm_arcsec: number | null };
+};
+export type FrameBackground = {
+  method: "irsa-zodi-model" | "robust-median-fallback"; source_extension: "ZODI" | null; model: string | null; source_unit: string | null;
+  subtracted_median_MJy_sr: number; residual_level_MJy_sr: number; level_statistic: string; fallback_reason?: string | null;
 };
 export type Manifest = {
   kind?: "field"; query?: FieldQuery; gaia_reference?: GaiaReference;
@@ -85,10 +90,17 @@ export function validateManifest(value: unknown): Manifest {
     if(primaryFinite===0)throw Error("Кадр не має скінченних значень у відповідній проєкції.");
     if(![f.marker_sky.x,f.marker_sky.y,f.marker_object.x,f.marker_object.y].every(n=>Number.isFinite(n)&&n>=0&&n<=255))throw Error("Некоректна проєкція координат.");
     if(!Number.isInteger(positionFlags(f))||positionFlags(f)<0||positionFlags(f)>4294967295||!/^\d{4}-\d{2}-\d{2}T/.test(f.date))throw Error("Некоректні прапорці або час кадру.");
+    if(f.background!==undefined&&!validBackground(f.background))throw Error("Метадані віднятого фону кадру некоректні.");
     if(localAssets){const assets=f.display_asset_sha256;const names=["image","object_image","quality_mask_image","object_quality_mask_image"] as const;if(!assets||names.some(name=>!imageValid(f[name])||!/^([a-f0-9]{64})$/.test(assets[name]??"")||!String(f[name]).endsWith(`:${assets[name]}`)))throw Error("Паспорт не пов’язує PNG кадру з контрольною сумою.");}
     ids.add(f.id);
   });
   return m;
+}
+function validBackground(b:FrameBackground){
+  const text=(v:unknown)=>typeof v==="string"&&v.length>0&&v.length<=512;
+  if(!b||typeof b!=="object"||!Number.isFinite(b.subtracted_median_MJy_sr)||!Number.isFinite(b.residual_level_MJy_sr)||!text(b.level_statistic))return false;
+  if(b.method==="irsa-zodi-model")return b.source_extension==="ZODI"&&text(b.model)&&text(b.source_unit);
+  return b.method==="robust-median-fallback"&&b.source_extension===null&&b.residual_level_MJy_sr===0&&(b.fallback_reason==null||text(b.fallback_reason));
 }
 export function positionFlags(f:Frame){return f.quality.flags_at_position ?? f.quality.flags_at_predicted_position ?? NaN}
 export function positionFlagged(f:Frame){return f.quality.bad_at_position ?? f.quality.bad_at_predicted_position ?? false}

@@ -24,7 +24,8 @@ from PIL import Image
 log.setLevel('ERROR')
 INFO_MASK = (1 << 21) | (1 << 12)
 BAD_MASK = np.uint32(0xffffffff ^ INFO_MASK)
-METHOD = 'field-viewer-0.8.0'
+METHOD = 'field-viewer-0.9.0'
+BACKGROUND_POLICY = 'Per exposure: IRSA ZODI extension converted to MJy/sr by its BUNIT and subtracted per pixel; if unusable, a 3-sigma MAD-clipped median over the displayed footprint is subtracted. Each frame records its method in frame.background.'
 ATTRIBUTION = 'This publication makes use of data products from the Spectro-Photometer for the History of the Universe, Epoch of Reionization and Ices Explorer (SPHEREx), which is a joint project of the Jet Propulsion Laboratory and the California Institute of Technology, and is funded by the National Aeronautics and Space Administration.'
 
 def display_wcs(ra, dec, width_deg, n=256):
@@ -72,6 +73,38 @@ def coverage_metrics(samples, mask, footprint):
         'usable_coverage_fraction': float(usable / denominator) if denominator else 0.0,
         'flagged_display_fraction': float(mask.mean())
     }
+
+def zodi_model(h, a):
+    """IRSA per-pixel zodiacal-light model in MJy/sr, or (None, reason) when it cannot be used."""
+    if 'ZODI' not in h:
+        return None, 'ZODI extension absent'
+    z = h['ZODI']
+    if z.data is None or z.data.shape != a.shape:
+        return None, 'ZODI shape differs from IMAGE'
+    unit = str(z.header.get('BUNIT', '')).strip()
+    if not unit:
+        return None, 'ZODI has no BUNIT'
+    try:
+        zodi = z.data.astype(float) * u.Unit(unit).to(u.MJy / u.sr)
+    except (ValueError, u.UnitsError):
+        return None, f'ZODI BUNIT {unit!r} is not convertible to MJy/sr'
+    if not np.isfinite(zodi[np.isfinite(a)]).all():
+        return None, 'ZODI is not finite wherever IMAGE is finite'
+    return zodi, None
+
+def robust_level(values):
+    """Median after one 3-sigma clip with sigma = 1.4826 * MAD; None without finite values."""
+    values = np.asarray(values, dtype=float)
+    values = values[np.isfinite(values)]
+    if not values.size:
+        return None
+    centre = float(np.median(values))
+    sigma = 1.4826 * float(np.median(np.abs(values - centre)))
+    if sigma > 0:
+        kept = values[np.abs(values - centre) <= 3 * sigma]
+        if kept.size:
+            centre = float(np.median(kept))
+    return centre
 
 def spectral_at(h, x, y):
     w = WCS(h['IMAGE'].header, fobj=h, key='W')
@@ -152,6 +185,10 @@ def process_fits(raw, record, query):
         flags = h['FLAGS'].data.astype(np.uint32)
         if a.ndim != 2 or flags.shape != a.shape:
             raise ValueError('Розміри IMAGE та FLAGS не узгоджені.')
+        # Zodiacal light changes with season: remove IRSA's per-pixel model before the common series scale.
+        zodi, zodi_problem = zodi_model(h, a)
+        if zodi is not None:
+            a = a - zodi
         native = WCS(header)
         ra, dec = query['ra'], query['dec']
         target = query.get('ephemeris')
@@ -191,6 +228,21 @@ def process_fits(raw, record, query):
         primary_metrics = target_metrics if moving else metrics
         if primary_metrics['finite_pixel_count'] == 0:
             return None, 'У проєкції цілі немає скінченних значень IMAGE.' if moving else 'У проєкції поля немає скінченних значень IMAGE.'
+        # Residual level over the displayed footprint, from unflagged pixels when any exist.
+        primary, primary_mask, primary_footprint = (object_sky, object_mask, object_footprint) if moving else (sky, mask, footprint)
+        usable = primary_footprint & ~primary_mask & np.isfinite(primary)
+        level_pixels = primary[usable] if usable.any() else primary[primary_footprint]
+        level = robust_level(level_pixels)
+        if zodi is not None:
+            background = {'method': 'irsa-zodi-model', 'source_extension': 'ZODI', 'model': str(h['ZODI'].header.get('ZODIMDL', 'unspecified')),
+                'source_unit': str(h['ZODI'].header['BUNIT']).strip(), 'subtracted_median_MJy_sr': float(np.nanmedian(zodi[np.isfinite(a)])),
+                'residual_level_MJy_sr': level}
+        else:
+            sky = sky - level
+            object_sky = object_sky - level
+            background = {'method': 'robust-median-fallback', 'source_extension': None, 'model': None, 'source_unit': None,
+                'subtracted_median_MJy_sr': level, 'residual_level_MJy_sr': 0.0, 'fallback_reason': zodi_problem}
+        background['level_statistic'] = 'median after one 3-sigma MAD clip over the displayed footprint' + ('' if usable.any() else ' (all pixels flagged; flagged pixels used)')
         native_flags = int(flags[int(round(y)), int(round(x))])
         fwhm = header.get('PSF_FWHM')
         fwhm = float(fwhm) if fwhm is not None and np.isfinite(float(fwhm)) else None
@@ -207,7 +259,7 @@ def process_fits(raw, record, query):
             'source_url': record['url'], 'cutout_url': record['cutout_url'],
             'sha256_cutout': sha256(raw).hexdigest(), 'retrieved_at': record['retrieved_at'],
             'native_shape': list(a.shape), 'native_pixel': {'x': x, 'y': y},
-            'brightness_unit': 'MJy / sr',
+            'brightness_unit': 'MJy / sr', 'background': background,
             'quality': {'level1': header.get('L1DQAFLG', 'unknown'), 'level2': header.get('L2DQAFLG', 'unknown'),
                 **metrics,
                 'target_coverage_fraction': target_metrics['coverage_fraction'],
@@ -288,7 +340,7 @@ def finalize_series(items, catalogue, excluded, runtime):
             'sky_center_ra': q['ra'], 'sky_center_dec': q['dec'], 'projection': 'ICRS TAN',
             'orientation': 'North up, East left', 'resampling': 'bilinear, display only',
             'stretch': 'asinh', 'stretch_parameter': 18, 'low_MJy_sr': low, 'high_MJy_sr': high,
-            'scale_scope': 'same scale for every frame', 'psf_matched': False,
+            'scale_scope': 'same scale for every frame', 'background_subtraction': BACKGROUND_POLICY, 'psf_matched': False,
             'noise_covariance_propagated': False, 'missing_data_style': '8-pixel checkerboard, grayscale 32/56; not measured signal',
             'bad_pixel_policy': 'Signal retained; overlay marks all FLAGS except SOURCE and FULLSAMPLE plus missing support.'},
         'limits': ['The centre marker is the requested coordinate, not an object detection.',
@@ -299,6 +351,7 @@ def finalize_series(items, catalogue, excluded, runtime):
             'Moving-target view is re-centred at the catalogue coordinate for each exposure; fixed-sky view retains one ICRS centre and can place later target markers outside its field.',
             'WCS roundtrip is a consistency check, not an empirical astrometric accuracy measurement.',
             'No PSF or full spectral response matching; brightness differences do not establish temporal variability.',
+            'Background removal subtracts the IRSA ZODI model (Kelsall et al. 1998 with wavelength scaling); residual diffuse light, model error and the frame-dependent wavelength remain, so frame-to-frame levels are not calibrated to one another.',
             'Wavelength filtering is by approximate central wavelength at the field centre, not full response equivalence.',
             'Selection is bounded; excluded exposures and catalogue truncation are recorded.',
             'Reprojected PNGs are for display, not quantitative photometry or astrometry.']
@@ -492,7 +545,7 @@ def finish_stream(catalogue_json, frames_json, excluded_json, runtime_json, scal
         'display': {'width': 256, 'height': 256, 'sky_fov_deg': q['fov'], 'object_fov_deg': q['fov'],
             'sky_center_ra': q['ra'], 'sky_center_dec': q['dec'], 'projection': 'ICRS TAN', 'orientation': 'North up, East left',
             'resampling': 'bilinear, display only', 'stretch': 'asinh', 'stretch_parameter': 18,
-            'low_MJy_sr': scale['low'], 'high_MJy_sr': scale['high'], 'scale_scope': 'same scale for every frame',
+            'low_MJy_sr': scale['low'], 'high_MJy_sr': scale['high'], 'scale_scope': 'same scale for every frame', 'background_subtraction': BACKGROUND_POLICY,
             'scale_algorithm': scale['algorithm'], 'scale_subbins_per_exponent': scale['subbins_per_exponent'],
             'scale_sample_count': scale['sample_count'], 'scale_low_interval_MJy_sr': scale['low_interval'],
             'scale_high_interval_MJy_sr': scale['high_interval'], 'psf_matched': False, 'noise_covariance_propagated': False,
@@ -506,6 +559,7 @@ def finish_stream(catalogue_json, frames_json, excluded_json, runtime_json, scal
             'Moving-target view is re-centred at the catalogue coordinate for each exposure; fixed-sky view retains one ICRS centre and can place later target markers outside its field.',
             'WCS roundtrip is a consistency check, not an empirical astrometric accuracy measurement.',
             'No PSF or full spectral response matching; brightness differences do not establish temporal variability.',
+            'Background removal subtracts the IRSA ZODI model (Kelsall et al. 1998 with wavelength scaling); residual diffuse light, model error and the frame-dependent wavelength remain, so frame-to-frame levels are not calibrated to one another.',
             'Wavelength filtering is by approximate central wavelength at the field centre, not full response equivalence.',
             'The 12th and 99.7th percentile display limits for large series are estimated from a bounded exponent histogram; their numerical brackets are recorded in display metadata.',
             'Display PNG assets are content-addressed and held in this browser storage; the passport records their SHA-256 references.',

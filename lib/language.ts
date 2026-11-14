@@ -148,6 +148,11 @@ const english: Record<string, string> = {
   "Це не виявлення SPHEREx.": "This is not a SPHEREx detection.",
   "Власний рух потребує числових RA, Dec, компонент руху та епохи.": "Proper motion needs numeric RA, Dec, motion components and epoch.",
   "Позиція за власним рухом": "Proper-motion position",
+  "Віднятий фон": "Subtracted background",
+  "Модель зодіакального світла IRSA (ZODI)": "IRSA zodiacal-light model (ZODI)",
+  "Залишковий рівень": "Residual level",
+  "Медіана поля: розширення ZODI непридатне": "Field median: ZODI extension unusable",
+  "Перед спільною шкалою з кожного кадру віднімається модель зодіакального світла IRSA з розширення ZODI (Kelsall et al. 1998 зі спектральним масштабуванням), переведена в MJy/sr. Якщо ZODI немає або воно непридатне, віднімається медіана поля з відсіканням 3σ за MAD. Інше дифузне світло й похибка моделі лишаються, тому залишковий рівень записано в паспорті кожного кадру.": "Before the common scale, each exposure has the IRSA zodiacal-light model from its ZODI extension (Kelsall et al. 1998 with wavelength scaling) converted to MJy/sr and subtracted. If ZODI is missing or unusable, a 3σ MAD-clipped field median is subtracted instead. Other diffuse light and model error remain, so each frame records its residual level.",
   "Каталожна позиція, поширена власним рухом до DATE-AVG; паралакс не враховано; не вимірювання SPHEREx": "Catalogue position propagated by proper motion to DATE-AVG; no parallax; not a SPHEREx measurement",
   "Положення за власним рухом каталогу, не виявлення": "Catalogue proper-motion position, not a detection",
   "Пунктирний маркер показує каталожну позицію, поширену сталим власним рухом до DATE-AVG FITS. Паралакс і променеву швидкість не враховано; це не виявлення об’єкта.": "The dashed marker shows the catalogue position propagated with constant proper motion to the FITS DATE-AVG. Parallax and radial velocity are not applied; it is not a detection."

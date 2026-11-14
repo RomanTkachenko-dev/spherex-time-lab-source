@@ -141,3 +141,15 @@ test("VOTable handles null cells and refuses expansion, errors and malformed row
   assert.throws(()=>parseVOTable('<!DOCTYPE x SYSTEM "secret">'+table));
   assert.throws(()=>parseVOTable(table.replace('<TD/>','')));
 });
+
+test("frame background metadata is optional but must be consistent when present", () => {
+  const demo = JSON.parse(readFileSync(new URL("../public/data/epochs/manifest.json", import.meta.url), "utf8"));
+  assert.doesNotThrow(() => validateManifest(structuredClone(demo)), "legacy series without background stay valid");
+  const zodi = { method: "irsa-zodi-model", source_extension: "ZODI", model: "KEL98_WAVESCL_V1", source_unit: "MJy / sr", subtracted_median_MJy_sr: 0.684, residual_level_MJy_sr: 0.035, level_statistic: "median after one 3-sigma MAD clip over the displayed footprint" };
+  const fallback = { method: "robust-median-fallback", source_extension: null, model: null, source_unit: null, subtracted_median_MJy_sr: 2, residual_level_MJy_sr: 0, level_statistic: "median", fallback_reason: "ZODI extension absent" };
+  const withBackground = (background: unknown) => { const m = structuredClone(demo); m.frames[0].background = background; return m; };
+  assert.doesNotThrow(() => validateManifest(withBackground(zodi)));
+  assert.doesNotThrow(() => validateManifest(withBackground(fallback)));
+  for (const bad of [{ ...zodi, model: "" }, { ...zodi, subtracted_median_MJy_sr: null }, { ...zodi, method: "guess" }, { ...fallback, residual_level_MJy_sr: 0.2 }, { ...fallback, source_extension: "ZODI" }, null])
+    assert.throws(() => validateManifest(withBackground(bad)), /фону/);
+});

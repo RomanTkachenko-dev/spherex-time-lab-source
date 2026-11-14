@@ -16,8 +16,8 @@ ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('field_pipeline',ROOT/'public/science/field_pipeline.py')
 p=importlib.util.module_from_spec(spec);spec.loader.exec_module(p)
 
-def synthetic_field(data):
-    """A documented synthetic TAN grid; spectral calibration is stubbed in tests."""
+def synthetic_field(data,zodi=None,zodi_unit='MJy / sr'):
+    """A documented synthetic TAN grid; spectral calibration is stubbed in tests. Optional ZODI extension."""
     header=p.display_wcs(20,0,0.32,n=64).to_header()
     header.update(OBSID='SYNTH_BLANK',DETECTOR=1,TIMESYS='UTC',BUNIT='MJy/sr',XPOSURE=100)
     header['MJD-AVG']=61023.0
@@ -26,6 +26,10 @@ def synthetic_field(data):
     header['DATE-END']='2025-12-14T00:00:50'
     hdus=p.fits.HDUList([p.fits.PrimaryHDU(),p.fits.ImageHDU(data,header=header,name='IMAGE'),
         p.fits.ImageHDU(np.zeros(data.shape,dtype=np.uint32),name='FLAGS')])
+    if zodi is not None:
+        zodi_header=p.fits.Header();zodi_header['ZODIMDL']='KEL98_WAVESCL_V1'
+        if zodi_unit is not None:zodi_header['BUNIT']=zodi_unit
+        hdus.append(p.fits.ImageHDU(np.asarray(zodi,dtype=np.float32),header=zodi_header,name='ZODI'))
     stream=BytesIO();hdus.writeto(stream)
     record={'id':'SYNTH_BLANKD1','observation':'SYNTH_BLANK','release':'spherex_qr3',
         'url':'https://irsa.ipac.caltech.edu/synthetic-test-only.fits',
@@ -84,6 +88,48 @@ class FieldChecks(unittest.TestCase):
         self.assertTrue(p.is_proper_motion(track));self.assertFalse(p.is_proper_motion({'source':'JPL Horizons'}))
         self.assertIn('власний рух',p.ephemeris_title(track));self.assertIn('J2000',p.ephemeris_description(track))
         self.assertIn('користувачем',p.ephemeris_description({**track,'source':'Proper motion (user-supplied)','source_url':None}))
+
+    def test_zodi_model_is_subtracted_in_mjy_per_sr_and_removes_seasonal_offsets(self):
+        star=np.full((64,64),0.05);star[32,32]=9
+        gradient=np.linspace(0.2,0.3,64)[None,:]*np.ones((64,1))
+        frames=[]
+        with patch.object(p,'spectral_at',return_value=(1.2,0.02)):
+            # The same sky seen in two seasons, with a 4x brighter zodiacal foreground in the second; one ZODI in kJy/sr.
+            for zodi,unit,scale in ((gradient,'MJy / sr',1),(4*gradient,'kJy / sr',1000)):
+                raw,record,query=synthetic_field(star+zodi,zodi=zodi*scale,zodi_unit=unit)
+                result,reason=p.process_fits(raw,record,query)
+                self.assertIsNone(reason);frames.append(result)
+        (first,sky_a,*_),(second,sky_b,*_)=frames
+        for frame,zodi in ((first,gradient),(second,4*gradient)):
+            b=frame['background']
+            self.assertEqual(b['method'],'irsa-zodi-model');self.assertEqual(b['source_extension'],'ZODI')
+            self.assertEqual(b['model'],'KEL98_WAVESCL_V1')
+            self.assertAlmostEqual(b['subtracted_median_MJy_sr'],float(np.median(zodi)),places=5)
+            self.assertAlmostEqual(b['residual_level_MJy_sr'],0.05,places=5)
+        self.assertEqual(second['background']['source_unit'],'kJy / sr')
+        self.assertLess(np.nanmax(np.abs(sky_a-sky_b)),1e-5,'identical sky after removing different foregrounds')
+        self.assertAlmostEqual(float(np.nanmedian(sky_a)),0.05,places=5)
+        json.dumps(first,allow_nan=False)
+
+    def test_unusable_or_missing_zodi_falls_back_to_a_robust_footprint_median(self):
+        # The 0.03 degree display spans about 6x6 native 18-arcsec pixels: one bright pixel is a point source here.
+        data=np.full((64,64),2.0);data[32,32]=50;data[0:8,:]=np.nan
+        cases=((None,None,'ZODI extension absent'),(np.ones((64,64)),'nW / (m2 sr)','not convertible'),
+            (np.ones((64,64)),None,'no BUNIT'),(np.ones((32,32)),'MJy / sr','shape differs'),
+            (np.where(np.indices((64,64))[0]==40,np.nan,1.0),'MJy / sr','not finite'))
+        with patch.object(p,'spectral_at',return_value=(1.2,0.02)):
+            for zodi,unit,reason_text in cases:
+                with self.subTest(reason=reason_text):
+                    raw,record,query=synthetic_field(data,zodi=zodi,zodi_unit=unit)
+                    (frame,sky,object_sky,*_),reason=p.process_fits(raw,record,query)
+                    self.assertIsNone(reason)
+                    b=frame['background']
+                    self.assertEqual(b['method'],'robust-median-fallback');self.assertIn(reason_text,b['fallback_reason'])
+                    self.assertAlmostEqual(b['subtracted_median_MJy_sr'],2.0,places=6,msg='bright source does not bias the level')
+                    self.assertAlmostEqual(float(np.nanmedian(sky)),0.0,places=6)
+                    self.assertGreater(float(np.nanmax(sky)),40.0)
+                    np.testing.assert_allclose(object_sky,sky,equal_nan=True)
+        self.assertIsNone(p.robust_level([np.nan]));self.assertEqual(p.robust_level([1,1,1,100]),1.0)
 
     def test_missing_data_texture_differs_from_finite_zero_signal(self):
         data=np.zeros((16,16));data[:8,:]=np.nan
