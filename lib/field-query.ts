@@ -119,7 +119,7 @@ export function cutoutRequest(input: unknown) {
   const centerDec = p.cutout_dec == null || p.cutout_dec === "" ? q.dec : Number(p.cutout_dec);
   if (!Number.isFinite(centerRa) || !Number.isFinite(centerDec) || centerRa < 0 || centerRa >= 360 || centerDec < -90 || centerDec > 90) throw Error("Некоректні координати центру FITS-вирізки.");
   url.searchParams.set("center", `${centerRa},${centerDec}`);
-  url.searchParams.set("size", String(Math.min(0.6, q.fov * 1.6)));
+  url.searchParams.set("size", String(Number(Math.min(0.6, q.fov * 1.6).toFixed(8))));
   return url.toString();
 }
 
