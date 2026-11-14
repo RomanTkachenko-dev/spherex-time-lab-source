@@ -8,6 +8,29 @@ The guardrail diff against `origin/main` must stay empty.
 Baseline on `origin/main`: `npm test` passes 79/79. `npx vite build --config vite.pages.config.ts` passes, with the
 usual >500 kB chunk warning.
 
+## Status (end of `ui-polish`)
+
+| Item | Status | Commit |
+|---|---|---|
+| B1 demo banner padding | ✅ fixed | `ui-fix: pad and restyle the GitHub Pages demo banner` |
+| B2 example buttons active state / aria-pressed | ✅ fixed | `ui-fix: highlight the open example …` |
+| B3 document language | ✅ fixed | `ui-fix: set document language to English …` |
+| B4 disabled search in Pages build | ✅ hint added | i18n commit |
+| B5 atlas dropdowns at 375 px | ✅ fixed | `ui-fix: give atlas dropdowns full width on phones …` |
+| B6–B9 untranslated labels / aria | ✅ fixed | i18n commit |
+| B10 science-lab open indicator | ✅ chevron | i18n commit |
+| R1/R3 English source + full UK dictionary | ✅ 530 keys, test-enforced (`tests/i18n.test.ts`) | i18n commit |
+| R2 runtime messages | ✅ ≈250 exact + 40 pattern translations at display time | i18n commits |
+| R4 `<html lang>` | ✅ | `ui-fix` |
+| T9 series titles | ✅ translated at display time | i18n commit |
+| U1–U4 newcomer wording | ✅ see UX_PROPOSALS.md | `ux:` + i18n commits |
+| N1–N4 | ⏸ needs logic change, not done | — |
+
+Check: `git grep -nP '"[^"]*[А-Яа-яІіЇїЄєҐґ][^"]*"' -- app` lists only `app/api/**` (frozen, translated at display) and the
+"Українська" option. Lint baseline unchanged (one existing `set-state-in-effect` error in `observatory.tsx`); new warnings
+are `exhaustive-deps` for `t` inside effects, intentionally left out of dependency arrays so a language switch
+doesn't restart the globe or background load.
+
 ## Glossary (use these terms in both languages)
 
 | English (UI) | Українська (UI) | Meaning for a newcomer |
