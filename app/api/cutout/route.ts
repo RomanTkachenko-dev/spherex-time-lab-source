@@ -4,7 +4,14 @@ export async function GET(request: Request) {
   try { url = cutoutRequest(Object.fromEntries(new URL(request.url).searchParams)); }
   catch (e) { return Response.json({ error: e instanceof Error ? e.message : "Некоректний запит." }, { status: 400 }); }
   try {
-    const response = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(90000), headers: { Accept: "application/fits" } });
+    const signal = AbortSignal.timeout(90000);
+    const requestFits = () => fetch(url, { redirect: "manual", signal });
+    let response = await requestFits();
+    for (let attempt = 0; attempt < 2 && [502, 503, 504].includes(response.status); attempt++) {
+      await response.body?.cancel();
+      await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+      response = await requestFits();
+    }
     if (!response.ok || !response.body) return Response.json({ error: "IRSA не повернув FITS-вирізку. Спробуйте пізніше." }, { status: 502 });
     const limit = 20 * 1024 * 1024;
     if (Number(response.headers.get("Content-Length")) > limit) return Response.json({ error: "Вирізка завелика для цієї версії. Зменште поле." }, { status: 413 });
