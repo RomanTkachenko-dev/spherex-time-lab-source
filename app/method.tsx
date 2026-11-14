@@ -1,13 +1,15 @@
 "use client";
+import { useTranslation } from "@/lib/language";
 import { Info, X } from "lucide-react";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { Manifest } from "@/lib/science";
 export default function Method({data,onOpen}:{data:Manifest|null;onOpen:()=>void}){
+  const t = useTranslation();
   const field=data?.kind==="field";
   const archiveCollection=data?(data.archive_collection??data.frames[0]?.release??"spherex_qr2"):"spherex_qr2";
   const releaseLabel=archiveCollection.replace("spherex_dr","DR").replace("spherex_qr","QR").replace("_deep"," · Deep Survey")+(archiveCollection.endsWith("_deep")?"":" · Wide Survey");
   const datasetDoi=data?.dataset_doi??(archiveCollection.includes("dr1")?"10.26131/IRSA678":archiveCollection.includes("qr3")?"10.26131/IRSA662":"10.26131/IRSA652");
-  return <Dialog onOpenChange={v=>{if(v)onOpen();}}><DialogTrigger asChild><button className="button quiet"><Info size={16}/>Як читати ці кадри</button></DialogTrigger><DialogContent className="science-dialog" showCloseButton={false}><DialogClose className="dialog-close" aria-label="Закрити"><X size={18}/></DialogClose><DialogHeader><DialogTitle>Що показує Time Lab</DialogTitle><DialogDescription>Походження даних і межі інтерпретації</DialogDescription></DialogHeader><div className="method-copy">
+  return <Dialog onOpenChange={v=>{if(v)onOpen();}}><DialogTrigger asChild><button className="button quiet"><Info size={16}/>{t("Як читати ці кадри")}</button></DialogTrigger><DialogContent className="science-dialog" showCloseButton={false}><DialogClose className="dialog-close" aria-label="Закрити"><X size={18}/></DialogClose><DialogHeader><DialogTitle>Що показує Time Lab</DialogTitle><DialogDescription>Походження даних і межі інтерпретації</DialogDescription></DialogHeader><div className="method-copy">
     <p>{field?`Ця серія містить ${data.frames.length} реальних спостережень вибраного поля. Джерело — калібровані FITS SPHEREx ${releaseLabel}; дані підготовлено в цій вкладці.`:"Готовий приклад містить 12 каліброваних спостережень 3I/ATLAS із детектора D5 за 14 грудня 2025 року, реліз QR2."}</p>
     <h3>Зображення та координати</h3><p>Кадри перепроєктовані за WCS із FITS на спільну сітку ICRS TAN, 256 × 256 пікселів. Північ угорі, схід ліворуч. Перевірка зворотного перетворення WCS перевіряє математичну узгодженість, а не вимірює астрометричну точність за зорями.</p>
     <p>{field?(data?.query?.ephemeris?"Пунктирний маркер показує положення за імпортованою таблицею JPL Horizons, сферично інтерпольоване до DATE-AVG FITS. Це прогноз із геоцентричною точкою спостереження; він не є виявленням об’єкта.":"Пунктирний маркер позначає введений центр поля. Це координата запиту, не виявлення або вимірювання об’єкта."):"Пунктирний маркер — прогноз IRSA для комети. Режим «За кометою» центрує кадри на цьому прогнозі. Точний момент прогнозу всередині експозиції не заданий у таблиці. Це не незалежне вимірювання."} Розмір кола умовний і не означає похибку. Час кадру — DATE-AVG, UTC.</p>

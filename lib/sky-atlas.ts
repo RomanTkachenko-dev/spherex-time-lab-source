@@ -34,3 +34,25 @@ export function parseSkyFootprint(region?: string): [number, number][] | null {
 export function skyObservationDate(record: Pick<SkyObservation, "mjd">) {
   return new Date((record.mjd - 40587) * 86400000).toISOString();
 }
+
+export function readAtlasLink(params: URLSearchParams) {
+  const coordinates = parseSkyCoordinates(`${params.get("ra") ?? ""} ${params.get("dec") ?? ""}`);
+  const date = (key: string) => {
+    const value = params.get(key) ?? "";
+    return /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) &&
+      new Date(value).toISOString().slice(0, 10) === value ? value : undefined;
+  };
+  const start = date("start"), end = date("end");
+  const detector = Number(params.get("detector"));
+  const fov = Number(params.get("fov"));
+  return {
+    coordinates, invalidCoordinates: !coordinates && (params.has("ra") || params.has("dec")),
+    start, end: start && end && end < start ? undefined : end,
+    detector: Number.isInteger(detector) && detector >= 1 && detector <= 6 ? detector : undefined,
+    release: params.get("release") === "qr3" ? "qr3" as const : "dr1" as const,
+    survey: params.get("survey") === "deep" ? "deep" as const : "wide" as const,
+    fov: fov >= .03 && fov <= 180 ? fov : coordinates ? 8 : 180,
+    search: params.get("search") === "1" && !!coordinates && !!start && !!end && end >= start,
+    embed: params.get("embed") === "1",
+  };
+}

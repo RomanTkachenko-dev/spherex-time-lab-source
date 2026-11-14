@@ -38,3 +38,19 @@ The Pages demo includes 3I/ATLAS and four DR1 D2 exposures of the same field fro
 To enable live archive access, deploy the API with `npx wrangler deploy --config wrangler.api.jsonc` from an authorized Cloudflare account. Set `SITE_ORIGIN` in that configuration to your frontend origin, and set the repository Actions variable `PAGES_API_ORIGIN` to the resulting HTTPS Worker origin (no trailing slash). Run the Pages workflow again. CORS is a browser policy, not access control for server clients. Configure service quotas for the public API before advertising it widely.
 
 The per-track Gaia search records individual catalogue queries, truncation and failures. Its finite padding can miss high proper-motion sources. Candidate detection fits nearby point-source amplitudes and records the peaks omitted by its compute budget. Photometric errors still omit unmeasured systematics. The observer-specific small-body check is described by `research/identify_small_bodies.py`.
+
+## Deep links and embedding
+
+Use decimal ICRS degrees, RA in [0, 360) and Dec in [-90, 90].
+Supported options: `lang=en|uk`, `ra`, `dec`, `fov` (map degrees),
+`start`, `end` (ISO UTC dates), `detector=1..6`, `release=dr1|qr3`,
+`survey=wide|deep`, and `embed=1` for a compact layout.
+Add `search=1` with valid coordinates and both dates to run the coverage query on load.
+
+Example iframe:
+
+```html
+<iframe title="SPHEREx Time Lab"
+  src="https://romantkachenko-dev.github.io/spherex-time-lab-source/?ra=167.2&amp;dec=5.15&amp;start=2025-12-14&amp;end=2025-12-14&amp;detector=5&amp;search=1&amp;embed=1&amp;lang=en"
+  width="100%" height="850" loading="lazy"></iframe>
+```

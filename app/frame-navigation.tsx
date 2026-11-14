@@ -1,8 +1,10 @@
 "use client";
+import { useTranslation } from "@/lib/language";
 import { useState, type FormEvent } from "react";
 import { nearestFrameIndexAtMjd, type Frame } from "@/lib/science";
 
 export default function FrameNavigation({frames,index,reference,compare,onSelect,onReference}:{frames:Frame[];index:number;reference:number;compare:boolean;onSelect:(index:number)=>void;onReference:(index:number)=>void}) {
+  const t = useTranslation();
   const [notice,setNotice]=useState("");
   function jump(event:FormEvent<HTMLFormElement>,target:"frame"|"reference"|"utc") {
     event.preventDefault();
@@ -20,9 +22,9 @@ export default function FrameNavigation({frames,index,reference,compare,onSelect
     }
   }
   return <div className="precise-navigation">
-    <form onSubmit={event=>jump(event,"frame")}><label htmlFor="frame-number">Номер кадру</label><div><input key={`frame-${index}`} id="frame-number" name="position" type="number" min={1} max={frames.length} step={1} defaultValue={index+1} required/><button className="button" type="submit">Перейти</button></div></form>
-    <form onSubmit={event=>jump(event,"utc")}><label htmlFor="frame-utc">Найближчий до часу UTC</label><div><input key={`utc-${index}`} id="frame-utc" name="position" type="datetime-local" step="0.001" defaultValue={frames[index].date.replace(/Z$/,"")} required/><button className="button" type="submit">Знайти</button></div></form>
-    {compare&&<form onSubmit={event=>jump(event,"reference")}><label htmlFor="reference-number">Номер опорного кадру</label><div><input key={`reference-${reference}`} id="reference-number" name="position" type="number" min={1} max={frames.length} step={1} defaultValue={reference+1} required/><button className="button" type="submit">Обрати</button></div></form>}
+    <form onSubmit={event=>jump(event,"frame")}><label htmlFor="frame-number">{t("Номер кадру")}</label><div><input key={`frame-${index}`} id="frame-number" name="position" type="number" min={1} max={frames.length} step={1} defaultValue={index+1} required/><button className="button" type="submit">{t("Перейти")}</button></div></form>
+    <form onSubmit={event=>jump(event,"utc")}><label htmlFor="frame-utc">{t("Найближчий до часу UTC")}</label><div><input key={`utc-${index}`} id="frame-utc" name="position" type="datetime-local" step="0.001" defaultValue={frames[index].date.replace(/Z$/,"")} required/><button className="button" type="submit">{t("Знайти")}</button></div></form>
+    {compare&&<form onSubmit={event=>jump(event,"reference")}><label htmlFor="reference-number">{t("Номер опорного кадру")}</label><div><input key={`reference-${reference}`} id="reference-number" name="position" type="number" min={1} max={frames.length} step={1} defaultValue={reference+1} required/><button className="button" type="submit">{t("Обрати")}</button></div></form>}
     {notice&&<p role="status">{notice}</p>}
   </div>;
 }
