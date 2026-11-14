@@ -179,6 +179,11 @@ export const ukrainian: Record<string, string> = {
   "Width of the image in arcminutes (the full Moon is about 30′)": "Ширина кадру в кутових мінутах (повний Місяць — близько 30′)",
   "Width ≈ {w}′": "Поле ≈ {w}′",
 
+  "Time Lab lets anyone flip through real NASA SPHEREx infrared pictures of the same patch of sky, taken days or months apart, to spot comets, asteroids and stars that change.": "Time Lab дає змогу кожному гортати справжні інфрачервоні знімки NASA SPHEREx однієї ділянки неба, зроблені з різницею в дні чи місяці, і помічати комети, астероїди та зорі, що змінюються.",
+  "Pick a spot on the sky globe, or open a ready-made example.": "Виберіть місце на небесній сфері або відкрийте готовий приклад.",
+  "Press play and watch the exposures change over time.": "Натисніть ▶ і подивіться, як змінюються кадри з часом.",
+  "Judge what moved: stars stay put, moving objects shift.": "Оцініть, що зрушило: зорі стоять, рухомі об’єкти зміщуються.",
+
   // ── Frame navigation ─────────────────────────────────────────────────────
   "Enter a valid UTC date and time.": "Введіть коректну дату й час UTC.",
   "Nearest exposure: {n} · {date} UTC.": "Найближчий кадр: {n} · {date} UTC.",
