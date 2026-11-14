@@ -7,3 +7,4 @@
 .observatory-embed .edition,.observatory-embed .footer{display:none}
 .observatory-embed .sky-atlas{margin:8px}
 @media(max-width:850px){.atlas-canvas{height:clamp(430px,68dvh,680px)}}
+@media(max-width:480px){.atlas-controls>label{grid-column:1/-1}}
