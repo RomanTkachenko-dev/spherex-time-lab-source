@@ -1,3 +1,4 @@
+import { publicAsset } from "./site-mode";
 export type SkyOverlay = { removeAll(): void; addFootprints(shapes: unknown[]): void };
 export type SkyImage = { setFrequency(value: { value: number; unit: 'Hz' }): void };
 export type SkyViewer = {
@@ -24,7 +25,7 @@ export function loadAladin(): Promise<AladinApi> {
     loading = new Promise<AladinApi>((resolve, reject) => {
       const script = document.createElement("script");
       script.type = "module";
-      script.src = "/vendor/aladin-lite-3.8.2/entry.js";
+      script.src = publicAsset("/vendor/aladin-lite-3.8.2/entry.js");
       const timer = setTimeout(() => { cleanup(); reject(new Error("Aladin module loading timed out")); }, 25000);
       function cleanup() { clearTimeout(timer); script.onload = null; script.onerror = null; script.remove(); }
       script.onload = () => {

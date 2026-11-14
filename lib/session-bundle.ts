@@ -1,3 +1,4 @@
+import { publicAsset } from "./site-mode.ts";
 import { buildSessionBundle, inspectSessionBundle, localizeBundleManifest, readBundleAsset, type BundleProgress } from "./bundle-format.ts";
 import { deleteDisplaySeries, openDisplayDatabase, readDisplayAsset, writeDisplayAsset } from "./frame-assets.ts";
 import { saveSession, type SavedSession, type SessionView } from "./sessions.ts";
@@ -7,7 +8,7 @@ export async function exportSessionBundle(manifest: Manifest, view: SessionView,
   return buildSessionBundle(manifest,view,async source => {
     if (source.startsWith("idb:")) return readDisplayAsset(source);
     if (!/^data:image\/png;base64,/.test(source) && !/^\/data\/atlas\/[a-z]+-\d{2}(?:-mask)?\.png$/.test(source)) throw Error("Непідтримуване джерело PNG для пакета.");
-    const response = await fetch(source,{signal:options.signal}); if (!response.ok) throw Error("Не вдалося прочитати зображення для експорту."); return response.blob();
+    const response = await fetch(publicAsset(source),{signal:options.signal}); if (!response.ok) throw Error("Не вдалося прочитати зображення для експорту."); return response.blob();
   },options);
 }
 
