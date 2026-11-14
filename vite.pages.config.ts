@@ -8,7 +8,7 @@ if (api && !/^https:\/\/[a-z0-9.-]+(?::[0-9]+)?$/i.test(api)) throw new Error("P
 const out = resolve("dist/pages");
 
 export default defineConfig({
-  root: "pages",
+  root: "static-site",
   base,
   publicDir: false,
   resolve: { alias: { "@": resolve(".") } },
