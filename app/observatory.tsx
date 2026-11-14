@@ -19,6 +19,7 @@ import { restoreActiveSession, saveSession, updateSessionView, type SavedSession
 import SessionLibrary from "./session-library";
 import FrameNavigation from "./frame-navigation";
 import ScienceLab from "./science-lab";
+import { centredScroll, stripLayout, visibleTiles, STRIP_PAUSE_GAP } from "@/lib/exposure-strip";
 
 type Mode = "sky" | "object";
 function initialView(manifest:Manifest):SessionView {
@@ -39,10 +40,50 @@ function useDisplaySource(reference: string, enabled=true) {
   return resolved.reference===reference?resolved:{reference,source:"",error:false};
 }
 
-function ExposureTile({ frame, index, selected, afterGap, label, onSelect }: { frame: Frame; index: number; selected: boolean; afterGap: boolean; label: string; onSelect: () => void }) {
+function ExposureTile({ frame, index, selected, left, label, onSelect }: { frame: Frame; index: number; selected: boolean; left: number; label: string; onSelect: () => void }) {
   const t = useTranslation();
   const {source:src,error} = useDisplaySource(frame.image);
-  return <button className={`exposure ${selected ? "selected" : ""} ${afterGap ? "after-gap" : ""}`} onClick={onSelect} aria-label={t("Exposure {n}, {time} UTC",{n:index + 1,time:label})+(error?", "+t("thumbnail unavailable"):"")} aria-pressed={selected} title={`${index + 1} / ${label} UTC`}><img src={src || undefined} width={64} height={64} alt="" loading="lazy"/><span>{String(index + 1).padStart(2, "0")}</span></button>;
+  return <button className={`exposure ${selected ? "selected" : ""}`} style={{left}} onClick={onSelect} aria-label={t("Exposure {n}, {time} UTC",{n:index + 1,time:label})+(error?", "+t("thumbnail unavailable"):"")} aria-pressed={selected} title={`${index + 1} / ${label} UTC`}><img src={src ? publicAsset(src) : undefined} width={64} height={64} alt="" loading="lazy"/><span>{String(index + 1).padStart(2, "0")}</span></button>;
+}
+
+function ExposureStrip({ frames, index, playing, label, onSelect }: { frames: Frame[]; index: number; playing: boolean; label: (date: string) => string; onSelect: (index: number) => void }) {
+  const t = useTranslation();
+  const scroller = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState({ left: 0, width: 0 });
+  const layout = useMemo(() => stripLayout(frames.map(f => f.mjd)), [frames]);
+  useEffect(() => {
+    const node = scroller.current;
+    if (!node) return;
+    const update = () => setView({ left: node.scrollLeft, width: node.clientWidth });
+    update();
+    const observer = new ResizeObserver(update); observer.observe(node);
+    node.addEventListener("scroll", update, { passive: true });
+    return () => { observer.disconnect(); node.removeEventListener("scroll", update); };
+  }, []);
+  // Keep the selected exposure in view: centre it when it is off-screen or near an edge.
+  useEffect(() => {
+    const node = scroller.current;
+    if (!node || !layout.offsets.length) return;
+    const tileLeft = layout.offsets[Math.min(index, layout.offsets.length - 1)];
+    const margin = 72;
+    if (tileLeft >= node.scrollLeft + margin && tileLeft + 64 <= node.scrollLeft + node.clientWidth - margin) return;
+    const target = centredScroll(layout, index, node.clientWidth);
+    const far = Math.abs(target - node.scrollLeft) > node.clientWidth * 2;
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    node.scrollTo({ left: target, behavior: far || playing || reduced ? "auto" : "smooth" });
+  }, [index, layout, playing]);
+  const [start, end] = visibleTiles(layout, view.left, view.width || 800);
+  const tiles = [];
+  for (let i = start; i < end; i++) {
+    if (layout.pauses[i]) tiles.push(<span key={`pause-${i}`} className="exposure-pause" style={{ left: layout.offsets[i] - 7 - STRIP_PAUSE_GAP / 2 - 1 }} aria-hidden="true"/>);
+    tiles.push(<ExposureTile key={frames[i].id} frame={frames[i]} index={i} selected={i === index} left={layout.offsets[i]} label={label(frames[i].date)} onSelect={() => onSelect(i)}/>);
+  }
+  return <div className="exposure-window">
+    <span>{t("All {n} exposures · selected: {i}",{n:frames.length,i:index + 1})}{view.width>0&&layout.width>view.width?" · "+t("scroll sideways to see the rest"):""}{layout.pauses.some(Boolean)?" · "+t("a line marks a pause of more than 10 min"):""}</span>
+    <div ref={scroller} className="exposure-strip exposure-strip-virtual" role="group" aria-label={t("All exposures in time order")} tabIndex={-1}>
+      <div className="exposure-track" style={{ width: layout.width }}>{tiles}</div>
+    </div>
+  </div>;
 }
 
 function TimelineMarks({ frames }: { frames: Frame[] }) {
@@ -171,8 +212,6 @@ function ObservatoryView({language, link, switchLanguage}: {
   const multipleDays = data && data.frames[0].date.slice(0,10) !== data.frames.at(-1)!.date.slice(0,10);
   const timeLabel = (date:string) => `${multipleDays ? date.slice(0,10) + " · " : ""}${formatTime(date)}`;
   const waveRange = useMemo(()=>data ? data.frames.reduce<[number,number]>((range,f)=>[Math.min(range[0],f.wavelength_um),Math.max(range[1],f.wavelength_um)],[Infinity,-Infinity]) : [0,0],[data]);
-  const stripStart = data ? Math.max(0,Math.min(index-3,data.frames.length-7)) : 0;
-  const stripFrames = data?.frames.slice(stripStart,stripStart+7) ?? [];
   const timeFraction = data ? frameTimeFraction(data.frames,index) : 0;
   const archiveCollection = data ? (field && data.query ? "spherex_"+data.query.release+(data.query.survey==="deep"?"_deep":"") : data.frames[0].release) : "spherex_qr2";
   const archiveLabel = data?.query?.survey==="most" ? archiveCollection.replace("spherex_dr","DR").replace("spherex_qr","QR")+" · IRSA MOST" : archiveCollection.replace("spherex_dr","DR").replace("spherex_qr","QR").replace("_deep"," · Deep Survey") + (archiveCollection.endsWith("_deep") ? "" : " · Wide Survey");
@@ -264,7 +303,7 @@ function ObservatoryView({language, link, switchLanguage}: {
           <div className="timeline"><div className="playback"><button className="icon-button" aria-label={t("Previous exposure")} disabled={!data || index === 0} onClick={() => selectFrame(index - 1)}><ChevronLeft size={18}/></button><button className="play-button" aria-label={playing ? t("Pause") : t("Play")} disabled={!data} onClick={() => setPlaying(p => !p)}>{playing ? <Pause size={19}/> : <Play size={19}/>}</button><button className="icon-button" aria-label={t("Next exposure")} disabled={!data || index === data.frames.length - 1} onClick={() => selectFrame(index + 1)}><ChevronRight size={18}/></button></div><div className="time-track"><div className="time-slider"><Slider min={0} max={1000} step={1} value={[Math.round(timeFraction*1000)]} onValueChange={([v]) => seekTimeline(v/1000)} disabled={!data} aria-label={t("Observation time; jumps to the nearest exposure")} aria-valuetext={frame ? frame.date+" UTC" : undefined}/>{data&&<TimelineMarks frames={data.frames}/>}</div><div className="track-labels"><span>{data ? timeLabel(data.frames[0].date) : "—"}</span><span>{t("UTC · each tick is one exposure")}</span><span>{data ? timeLabel(data.frames.at(-1)!.date) : "—"}</span></div></div><Select value={delay} onValueChange={setDelay}><SelectTrigger className="speed-select" aria-label={t("Playback speed")}><SelectValue/></SelectTrigger><SelectContent><SelectItem value="1600">{t("Slow")}</SelectItem><SelectItem value="900">{t("Normal")}</SelectItem><SelectItem value="400">{t("Fast")}</SelectItem></SelectContent></Select></div>
         </div>
         {data&&<FrameNavigation frames={data.frames} index={index} reference={reference} compare={compare} onSelect={selectFrame} onReference={setReference}/>}
-        {data && <div className="exposure-window"><span>{t("Nearby exposures: {a}–{b} of {n}",{a:stripStart+1,b:Math.min(stripStart+stripFrames.length,data.frames.length),n:data.frames.length})}</span><div className="exposure-strip" aria-label={t("Exposures near the selected moment")}>{stripFrames.map((f, offset) => {const i=stripStart+offset;return <ExposureTile key={f.id} frame={f} index={i} selected={i===index} afterGap={i>0&&(f.mjd-data.frames[i-1].mjd)*1440>10} label={timeLabel(f.date)} onSelect={()=>selectFrame(i)}/>;})}</div></div>}
+        {data && <ExposureStrip frames={data.frames} index={index} playing={playing} label={timeLabel} onSelect={selectFrame}/>}
         <div className="spectral-notice"><Info size={19}/><div><strong>{t("Time and colour change together")}</strong><p>{t("Each exposure sees a slightly different infrared colour (wavelength), so a brightness change between exposures does not by itself mean the object changed.")} {compare && difference ? t("Δλ = {d} µm; that is {r} of the smaller bandwidth.",{d:difference.delta.toFixed(4),r:difference.widthRatio.toFixed(2)}) : t("At the marked position: {a}–{b} µm.",{a:waveRange[0].toFixed(4),b:waveRange[1].toFixed(4)})}</p>{compare && difference?.sameExposure && <p>{t("You picked the same exposure twice. Choose another reference exposure to compare.")}</p>}</div></div>
         <p className="viewer-caption">{mode === "sky" ? t("Shared sky grid: stars should stay in place.") : t("Each image is centred on the comet's predicted position, so the stars drift.")} {t("A dark checkerboard in new series marks missing data.")} {t("Labels and the slider show real UTC time; playback steps evenly between exposures, not in real time.")} {frame && index > 0 && t("Since the previous exposure: {m} min.",{m:((frame.mjd - data!.frames[index - 1].mjd) * 1440).toFixed(1)})}</p>{data?.completeness&&<details className="series-report"><summary>{t("Selection report: {n} exposures out of {m} found",{n:data.frames.length,m:data.completeness.matched_count})}</summary><p>{data.completeness.selected_count===data.completeness.matched_count?t("All {s} catalogue matches were processed; {k} passed the FITS/WCS checks and {x} were rejected.",{s:data.completeness.selected_count,k:data.frames.length,x:data.completeness.excluded.length}):t("{s} of {m} matches were selected, spread evenly in MJD. {x} were rejected by the FITS/WCS checks.",{s:data.completeness.selected_count,m:data.completeness.matched_count,x:data.completeness.excluded.length})}</p>{data.completeness.catalogue_truncated&&<p className="flagged-text">{t("The catalogue was capped at 1000 records, so this selection is incomplete.")}</p>}{data.completeness.excluded.map((f,i)=><p key={i}><code>{f.id}</code><br/>{msg(f.reason.split("\n").filter(Boolean).at(-1))}</p>)}{data.observation_table_parts&&data.observation_table_parts.length>1?<details><summary>{t("Repeat the archive queries ({n} parts)",{n:data.observation_table_parts.length})}</summary>{data.observation_table_parts.map((part,i)=><p key={`${part.start}-${i}`}><a className="text-link" href={part.source_url} target="_blank" rel="noreferrer">{t("Part {n}",{n:i+1})} · {part.start}–{part.end} ↗</a><br/><code>SHA-256 {part.source_sha256}</code></p>)}</details>:<a className="text-link" href={data.observation_table_url} target="_blank" rel="noreferrer">{t("Repeat the catalogue query ↗")}</a>}</details>}<div className="image-credit-inline">NASA / JPL-Caltech / IPAC · {t("one brightness scale for all exposures")}</div>
       </section>
