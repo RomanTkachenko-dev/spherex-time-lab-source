@@ -24,6 +24,7 @@
         <a class="tab" href="../lab/"><span class="tab-no">02</span>Lab</a>
         <a class="tab active" aria-current="page" href="../about/"><span class="tab-no">03</span>About</a>
       </nav>
+      <label class="lang-picker"><span>Language</span><select data-site-language aria-label="Language / Мова"><option value="en">English</option><option value="uk">Українська</option></select></label>
     </div>
   </header>
 
@@ -61,6 +62,30 @@
           <li>Built on public tools: Astropy for FITS and WCS, Aladin Lite from CDS for the sky atlas.</li>
         </ul>
 
+        <h2 id="team">Team</h2>
+        <div class="team">
+          <div class="person"><span class="avatar" aria-hidden="true">DP</span><div>
+            <h3>Daryna Provolovska</h3>
+            <p class="role">MSc student, Astronomy · Taras Shevchenko National University of Kyiv</p>
+            <a href="https://github.com/rinastro" rel="noopener">GitHub</a>
+          </div></div>
+          <div class="person"><span class="avatar" aria-hidden="true">RT</span><div>
+            <h3>Roman Tkachenko</h3>
+            <p class="role">Developer · SPHEREx Time Lab</p>
+            <a href="https://github.com/RomanTkachenko-dev" rel="noopener">GitHub</a>
+          </div></div>
+          <div class="person"><span class="avatar" aria-hidden="true">KI</span><div>
+            <h3>Kira Ishchenko</h3>
+            <p class="role">MSc student, Bioinformatics and Biomedical Data Analysis · Kyiv School of Economics</p>
+            <p>Analyst with a background in software engineering and statistics.</p>
+          </div></div>
+          <div class="person"><span class="avatar" aria-hidden="true">VB</span><div>
+            <h3>Volodymyr Buhlak</h3>
+            <p class="role">MSc student, Astrophysics · Ivan Franko National University of Lviv</p>
+            <p>Works on photoionization modelling of nebular environments. Also builds front-end and full-stack websites on whatever topic catches his interest.</p>
+          </div></div>
+        </div>
+
         <h2>Data and credits</h2>
         <p class="ack">This publication makes use of data products from the Spectro-Photometer for the History of the Universe, Epoch of Reionization and Ices Explorer (SPHEREx), which is a joint project of the Jet Propulsion Laboratory and the California Institute of Technology, and is funded by the National Aeronautics and Space Administration.</p>
         <p class="ack">SPHEREx Data Release 1 spectral images: <a href="https://doi.org/10.26131/IRSA678" rel="noopener">doi:10.26131/IRSA678</a>. SPHEREx DR1 all-sky spectral cube: <a href="https://doi.org/10.26131/IRSA679" rel="noopener">doi:10.26131/IRSA679</a>. Data are served by the <a href="https://irsa.ipac.caltech.edu/Missions/spherex.html" rel="noopener">NASA/IPAC Infrared Science Archive</a>.</p>
@@ -79,11 +104,13 @@
       <nav aria-label="Footer">
         <a href="../lab/">Open the lab</a>
         <a href="../about/">About</a>
+        <a href="../about/#team">Team</a>
         <a href="https://github.com/RomanTkachenko-dev/spherex-time-lab-source" rel="noopener">Source code</a>
         <a href="https://irsa.ipac.caltech.edu/Missions/spherex.html" rel="noopener">SPHEREx at IRSA</a>
       </nav>
     </div>
   </footer>
   <script>document.querySelectorAll('[data-year]').forEach(function (el) { el.textContent = new Date().getFullYear(); });</script>
+  <script type="module" src="/site-i18n.js"></script>
 </body>
 </html>
