@@ -24,7 +24,7 @@ function Plot({frames,spectrum,onSelect}:{frames:LabFrame[];spectrum:boolean;onS
     {(hi===lo?[.5]:[0,.25,.5,.75,1]).map(f=><text key={f} x={x(lo+f*(hi-lo))} y="265" textAnchor="middle">{(lo+f*(hi-lo)).toFixed(spectrum?3:5)}</text>)}
     {[0,.25,.5,.75,1].map(f=><text key={f} x="59" y={y(bottom+f*(top-bottom))+4} textAnchor="end">{(bottom+f*(top-bottom)).toPrecision(3)}</text>)}
     <text x="380" y="292" textAnchor="middle">{spectrum?t('Wavelength · µm'):'MJD · UTC'}</text><text x="12" y="20">{t('Flux · µJy')}</text>
-    {points.map(f=>{const p=f.target!,px=x(spectrum?p.wavelength_um:f.mjd),py=y(p.flux_uJy);return <g key={f.id} tabIndex={0} role="button" aria-label={`${f.date} UTC, ${p.flux_uJy.toPrecision(4)} ± ${p.flux_error_uJy.toPrecision(3)} ${t('µJy')}`} onClick={()=>onSelect(f.id)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onSelect(f.id);}}}><title>{f.id}: {p.wavelength_um.toFixed(5)} {t('µm')}; {f.date} UTC</title><line x1={px} x2={px} y1={y(p.flux_uJy-p.flux_error_uJy)} y2={y(p.flux_uJy+p.flux_error_uJy)} stroke="#b9ec68"/><circle cx={px} cy={py} r="4" fill="#b9ec68"/></g>;})}
+    {points.map(f=>{const p=f.target!,px=x(spectrum?p.wavelength_um:f.mjd),py=y(p.flux_uJy);return <g key={f.id} tabIndex={0} role="button" aria-label={`${f.date} UTC, ${p.flux_uJy.toPrecision(4)} ± ${p.flux_error_uJy.toPrecision(3)} ${t('µJy')}`} onClick={()=>onSelect(f.id)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onSelect(f.id);}}}><title>{f.id}: {p.wavelength_um.toFixed(5)} {t('µm')}; {f.date} UTC</title><line x1={px} x2={px} y1={y(p.flux_uJy-p.flux_error_uJy)} y2={y(p.flux_uJy+p.flux_error_uJy)} stroke="#68a6ec"/><circle cx={px} cy={py} r="4" fill="#68a6ec"/></g>;})}
   </svg>;
 }
 
