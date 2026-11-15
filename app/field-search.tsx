@@ -248,7 +248,7 @@ export default function FieldSearch({ onOpen, onPrepared, controlRef }: { onOpen
   }
   useImperativeHandle(controlRef, () => ({ openAt: target => {
     setOpen(true); onOpen();
-    if (busy || resolving) { setError(t("Finish or pause the current job first, then pick the spot on the globe again.")); return; }
+    if (busy || resolving) { setError(t("Finish or pause the current job first, then pick the spot in the atlas again.")); return; }
     setMode("series"); setPlace("custom"); setRa(String(target.ra)); setDec(String(target.dec));
     setStart(target.start); setEnd(target.end); setDetector(String(target.detector));
     setRelease(target.release); setSurvey(target.survey); setFov("0.12");
