@@ -1,4 +1,4 @@
-import { parseSesameXml, sesameUrl } from "@/lib/sesame";
+import { parseSesameXml, SESAME_MIRRORS, sesameUrl } from "@/lib/sesame";
 
 export async function GET(request: Request) {
   const name = new URL(request.url).searchParams.get("name")?.trim() ?? "";
@@ -6,11 +6,22 @@ export async function GET(request: Request) {
     return Response.json({ error: "Введіть назву астрономічного об’єкта (до 128 символів)." }, { status: 400 });
   }
 
-  const source = sesameUrl(name);
+  let source = sesameUrl(name), response: Response | null = null, reachable = false;
+  for (let mirror = 0; mirror < SESAME_MIRRORS.length; mirror++) {
+    source = sesameUrl(name, mirror);
+    try {
+      const attempt = await fetch(source, { signal: AbortSignal.timeout(3000), headers: { Accept: "application/xml, text/xml", "User-Agent": "SPHEREx-Time-Lab/1.0 (+https://github.com/RomanTkachenko-dev/spherex-time-lab-source)" } });
+      reachable = true;
+      if (attempt.ok) { response = attempt; break; }
+      await attempt.body?.cancel();
+    } catch { /* try the next mirror */ }
+  }
+  if (!response) {
+    return Response.json({ error: reachable ? "Служба астрономічних назв тимчасово недоступна." : "Не вдалося зв’язатися зі службою астрономічних назв. Спробуйте ще раз або введіть RA та Dec вручну." }, { status: 502 });
+  }
   try {
-    const response = await fetch(source, { signal: AbortSignal.timeout(10000), headers: { Accept: "application/xml, text/xml" } });
     const declaredLength = Number(response.headers.get("Content-Length"));
-    if (!response.ok || (Number.isFinite(declaredLength) && declaredLength > 128_000)) {
+    if (Number.isFinite(declaredLength) && declaredLength > 128_000) {
       return Response.json({ error: "Служба астрономічних назв тимчасово недоступна." }, { status: 502 });
     }
     const xml = await response.text();

@@ -48,7 +48,14 @@ export function parseSesameXml(xml: string, fallbackName: string): SesameTarget 
   return null;
 }
 
-/** Canonical Sesame query URL for an object name; provenance is derived, never client-supplied. */
-export function sesameUrl(name: string) {
-  return "https://cds.unistra.fr/cgi-bin/nph-sesame/-oxp/SN?" + encodeURIComponent(name).replace(/%20/g, "+");
+/** Sesame mirrors in order of preference: the main CDS host can reject requests from cloud workers. */
+export const SESAME_MIRRORS = [
+  "https://cds.unistra.fr/cgi-bin/nph-sesame/-oxp/SN",
+  "https://vizier.cds.unistra.fr/viz-bin/nph-sesame/-oxp/SN",
+  "https://vizier.cfa.harvard.edu/viz-bin/nph-sesame/-oxp/SN",
+] as const;
+
+/** Sesame query URL for an object name on one mirror; provenance is derived, never client-supplied. */
+export function sesameUrl(name: string, mirror = 0) {
+  return SESAME_MIRRORS[mirror] + "?" + encodeURIComponent(name).replace(/%20/g, "+");
 }

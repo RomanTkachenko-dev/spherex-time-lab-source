@@ -1,4 +1,4 @@
-import { sesameUrl } from "./sesame.ts";
+import { SESAME_MIRRORS, sesameUrl } from "./sesame.ts";
 import { propagateGaia } from "./gaia.ts";
 export type EphemerisPoint = { mjd: number; ra: number; dec: number };
 export type HorizonsEphemeris = {
@@ -76,7 +76,10 @@ export function validateProperMotionEphemeris(input: Record<string, unknown>, po
   if (input.source === "Proper motion (user-supplied)") return { source: input.source, source_url: null, target_name, query_name: null, resolver: null, motion_reference: null, retrieved_at: null, ...model };
   const query_name = text("query_name", 129), resolver = text("resolver", 129), retrieved = text("retrieved_at", 40);
   if (input.source !== "Proper motion (CDS Sesame)" || !query_name || query_name.length > 128 || /[\u0000-\u001f\u007f]/.test(query_name) || !resolver || resolver.length > 128 || !Number.isFinite(Date.parse(retrieved))) throw Error("Не вистачає метаданих походження власного руху з CDS Sesame.");
-  return { source: input.source, source_url: sesameUrl(query_name), target_name, query_name, resolver, motion_reference: text("motion_reference", 64) || null, retrieved_at: new Date(Date.parse(retrieved)).toISOString(), ...model };
+  // Provenance must be the Sesame mirror that answered, derived from the query name.
+  const source_url = SESAME_MIRRORS.map((_, mirror) => sesameUrl(query_name, mirror)).find(url => url === input.source_url);
+  if (!source_url) throw Error("Джерело власного руху має бути запитом до CDS Sesame або його дзеркала.");
+  return { source: input.source, source_url, target_name, query_name, resolver, motion_reference: text("motion_reference", 64) || null, retrieved_at: new Date(Date.parse(retrieved)).toISOString(), ...model };
 }
 
 const MONTHS: Record<string, number> = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };

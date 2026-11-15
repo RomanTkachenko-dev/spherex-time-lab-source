@@ -1,101 +1,142 @@
 /**
- * Frame differences reconstructed from the 8-bit display PNGs.
+ * Difference images between display frames of one series.
  *
- * `field_pipeline.display_gray` writes gray = floor(asinh(18·s)/asinh(18)·255) with
- * s = clip((v − low)/(high − low), 0, 1), then flips rows (north up). Inverting that
- * stretch recovers MJy/sr to within one gray step; values at gray 0 or 255 are only
- * bounds (clipped at the series display limits). This is a display product, not photometry.
+ * Every frame of a series is rendered with the same asinh stretch and the same
+ * low/high limits (manifest.display), so the 8-bit grey level can be mapped back
+ * to surface brightness. The difference is then taken in MJy/sr, not in grey levels.
+ *
+ * Limits of this method (also shown in the interface):
+ * - 8-bit quantisation: one grey step is a larger brightness step near `high`;
+ * - grey levels 0 and 255 are excluded because the underlying value may be clipped;
+ * - pixels marked in either quality mask (bad FLAGS or missing data) are excluded;
+ * - no PSF or spectral-response matching: SPHEREx frames taken on different dates
+ *   usually sample different wavelengths, so stars of different colours leave residuals.
+ *
+ * The reference can be one frame or the per-pixel median of several (a moving source
+ * drops out of the median). Two renderings share the same pixels: grey with a range set
+ * by a quantile of |Δ|, or a diverging colour scale of ±k·σ (σ from the MAD).
  */
-export type Stretch = { low: number; high: number; parameter: number; checkerboard: boolean };
-export type DecodedFrame = { values: Float32Array; clipped: Uint8Array; width: number; height: number };
-export type DifferenceResult = { values: Float32Array; clipped: Uint8Array; width: number; height: number };
 
-export const CLIP_LOW = 1, CLIP_HIGH = 2;
+export type DisplayScale = { low: number; high: number; stretch: number };
 
-export function displayStretch(display: { stretch?: unknown; stretch_parameter?: unknown; low_MJy_sr: number; high_MJy_sr: number; missing_data_style?: unknown }): Stretch | null {
-  const parameter = Number(display.stretch_parameter);
-  if (display.stretch !== "asinh" || !Number.isFinite(parameter) || parameter <= 0 || !Number.isFinite(display.low_MJy_sr) || !Number.isFinite(display.high_MJy_sr) || !(display.high_MJy_sr > display.low_MJy_sr)) return null;
-  return { low: display.low_MJy_sr, high: display.high_MJy_sr, parameter, checkerboard: typeof display.missing_data_style === "string" && display.missing_data_style.startsWith("8-pixel checkerboard") };
+export type DifferenceResult = {
+  /** RGBA pixels: mid grey = no change, white = brighter now, black = brighter in the reference. */
+  rgba: Uint8ClampedArray;
+  /** Brightness difference (MJy/sr) mapped to pure white / pure black. */
+  limit: number;
+  validCount: number;
+  maskedCount: number;
+  clippedCount: number;
+};
+
+/** Pixel states: excluded pixels carry NaN values and stay transparent when rendered. */
+export const VALID = 0, MASKED = 1, CLIPPED = 2;
+export type DecodedFrame = { values: Float64Array; state: Uint8Array };
+export type Difference = DecodedFrame & { validCount: number; maskedCount: number; clippedCount: number };
+
+/** Inverse of display_gray(): grey level 0..255 -> surface brightness in MJy/sr. */
+export function grayToValue(gray: number, scale: DisplayScale): number {
+  const k = scale.stretch;
+  const scaled = Math.sinh((gray / 255) * Math.asinh(k)) / k;
+  return scale.low + scaled * (scale.high - scale.low);
 }
 
-/** Forward display stretch, identical to the Python kernel (used for tests and round-trip checks). */
-export function valueToGray(value: number, s: Stretch): number {
-  const scaled = Math.min(1, Math.max(0, (value - s.low) / (s.high - s.low)));
-  return Math.floor(Math.asinh(scaled * s.parameter) / Math.asinh(s.parameter) * 255);
+/** Lookup table for all 256 grey levels. */
+export function grayLookup(scale: DisplayScale): Float64Array {
+  if (!(scale.high > scale.low) || !(scale.stretch > 0)) throw Error("Invalid display scale");
+  const table = new Float64Array(256);
+  for (let g = 0; g < 256; g++) table[g] = grayToValue(g, scale);
+  return table;
 }
 
-/** Centre of the value interval that maps to `gray`; clipped grays return the display limit they bound. */
-export function grayToValue(gray: number, s: Stretch): number {
-  if (gray <= 0) return s.low;
-  if (gray >= 255) return s.high;
-  const scaled = Math.sinh((gray + 0.5) / 255 * Math.asinh(s.parameter)) / s.parameter;
-  return s.low + scaled * (s.high - s.low);
+/** Robust |d| quantile (nearest rank) used for the symmetric display range. */
+export function absoluteQuantile(values: Float64Array, count: number, q: number): number {
+  if (count === 0) return 0;
+  const sorted = Float64Array.from(values.subarray(0, count), Math.abs).sort();
+  return sorted[Math.min(count - 1, Math.max(0, Math.ceil(q * count) - 1))];
 }
 
-/** Gray value of the missing-data checkerboard at PNG column x and row r (rows are flipped to north up). */
-export function checkerGray(x: number, row: number, height: number) {
-  const y = height - 1 - row;
-  return ((x >> 3) + (y >> 3)) % 2 ? 32 : 56;
-}
-
-/**
- * RGBA pixels of a display PNG and, optionally, its quality-mask PNG (alpha > 0 marks masked pixels).
- * Missing data are NaN: masked pixels that carry exactly the checkerboard gray of their position.
- */
-export function decodeDisplay(image: Uint8ClampedArray, mask: Uint8ClampedArray | null, width: number, height: number, s: Stretch): DecodedFrame {
-  if (image.length !== width * height * 4 || (mask && mask.length !== image.length)) throw Error("Розміри PNG кадру і маски не узгоджені.");
-  const lookup = new Float32Array(256);
-  for (let g = 0; g < 256; g++) lookup[g] = grayToValue(g, s);
-  const values = new Float32Array(width * height), clipped = new Uint8Array(width * height);
-  for (let row = 0; row < height; row++) for (let x = 0; x < width; x++) {
-    const i = row * width + x, gray = image[i * 4];
-    if (s.checkerboard && mask && mask[i * 4 + 3] > 0 && gray === checkerGray(x, row, height)) { values[i] = NaN; continue; }
-    values[i] = lookup[gray];
-    clipped[i] = gray === 0 ? CLIP_LOW : gray === 255 ? CLIP_HIGH : 0;
+/** Grey RGBA frame + its quality mask (alpha > 0 = flagged or missing; null when absent) -> MJy/sr. */
+export function decodeFrame(rgba: Uint8ClampedArray, mask: Uint8ClampedArray | null, scale: DisplayScale): DecodedFrame {
+  if (rgba.length % 4 !== 0) throw Error("Frames differ in size");
+  if (mask && mask.length !== rgba.length) throw Error("Mask differs in size");
+  const lookup = grayLookup(scale), pixels = rgba.length / 4;
+  const values = new Float64Array(pixels).fill(NaN), state = new Uint8Array(pixels);
+  for (let i = 0; i < pixels; i++) {
+    const p = i * 4, g = rgba[p];
+    if (mask && mask[p + 3] > 0) state[i] = MASKED;
+    else if (g === 0 || g === 255) state[i] = CLIPPED;
+    else values[i] = lookup[g];
   }
-  return { values, clipped, width, height };
+  return { values, state };
 }
 
-export function subtractFrames(current: DecodedFrame, reference: DecodedFrame): DifferenceResult {
-  if (current.width !== reference.width || current.height !== reference.height) throw Error("Кадри для різниці мають різні розміри.");
-  const values = new Float32Array(current.values.length), clipped = new Uint8Array(current.values.length);
-  for (let i = 0; i < values.length; i++) {
-    values[i] = current.values[i] - reference.values[i];
-    clipped[i] = current.clipped[i] | reference.clipped[i];
-  }
-  return { values, clipped, width: current.width, height: current.height };
-}
-
-/** Per-pixel median of finite values; NaN where fewer than two frames have data. Clipped if the median sample was. */
+/** Per-pixel median over frames; a pixel needs at least two valid frames, otherwise it is excluded. */
 export function medianFrame(frames: DecodedFrame[]): DecodedFrame {
-  if (frames.length < 2) throw Error("Для медіани серії потрібно щонайменше два кадри.");
-  const { width, height } = frames[0];
-  if (frames.some(f => f.width !== width || f.height !== height)) throw Error("Кадри для медіани мають різні розміри.");
-  const values = new Float32Array(width * height), clipped = new Uint8Array(width * height);
-  const order = new Array<number>(frames.length);
-  for (let i = 0; i < values.length; i++) {
-    let n = 0;
-    for (let k = 0; k < frames.length; k++) if (Number.isFinite(frames[k].values[i])) order[n++] = k;
-    if (n < 2) { values[i] = NaN; continue; }
-    const ranked = order.slice(0, n).sort((a, b) => frames[a].values[i] - frames[b].values[i]);
-    const mid = n >> 1;
-    if (n % 2) { values[i] = frames[ranked[mid]].values[i]; clipped[i] = frames[ranked[mid]].clipped[i]; }
-    else { values[i] = (frames[ranked[mid - 1]].values[i] + frames[ranked[mid]].values[i]) / 2; clipped[i] = frames[ranked[mid - 1]].clipped[i] | frames[ranked[mid]].clipped[i]; }
+  if (frames.length < 2) throw Error("The series median needs at least two frames.");
+  const pixels = frames[0].values.length;
+  if (frames.some(f => f.values.length !== pixels)) throw Error("Frames differ in size");
+  const values = new Float64Array(pixels).fill(NaN), state = new Uint8Array(pixels), sample = new Float64Array(frames.length);
+  for (let i = 0; i < pixels; i++) {
+    let n = 0, masked = false;
+    for (const frame of frames) {
+      if (frame.state[i] === VALID) sample[n++] = frame.values[i];
+      else if (frame.state[i] === MASKED) masked = true;
+    }
+    if (n < 2) { state[i] = masked || n === 1 ? MASKED : CLIPPED; continue; }
+    const sorted = sample.subarray(0, n).sort(), mid = n >> 1;
+    values[i] = n % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
   }
-  return { values, clipped, width, height };
+  return { values, state };
 }
 
-/** σ = 1.4826·MAD of finite, unclipped difference values; null when undefined or zero. */
-export function robustSigma(result: DifferenceResult): { sigma: number; median: number; used: number } | null {
-  const sample: number[] = [];
-  for (let i = 0; i < result.values.length; i++) if (Number.isFinite(result.values[i]) && !result.clipped[i]) sample.push(result.values[i]);
-  if (sample.length < 16) return null;
-  const median = quantileSorted(sample.sort((a, b) => a - b));
-  const deviations = sample.map(v => Math.abs(v - median)).sort((a, b) => a - b);
-  const sigma = 1.4826 * quantileSorted(deviations);
-  return Number.isFinite(sigma) && sigma > 0 ? { sigma, median, used: sample.length } : null;
+/** current − reference; a pixel masked in either is masked, otherwise clipped in either is clipped. */
+export function subtractFrames(current: DecodedFrame, reference: DecodedFrame): Difference {
+  if (current.values.length !== reference.values.length) throw Error("Frames differ in size");
+  const pixels = current.values.length;
+  const values = new Float64Array(pixels).fill(NaN), state = new Uint8Array(pixels);
+  let validCount = 0, maskedCount = 0, clippedCount = 0;
+  for (let i = 0; i < pixels; i++) {
+    const a = current.state[i], b = reference.state[i];
+    if (a === MASKED || b === MASKED) { state[i] = MASKED; maskedCount++; }
+    else if (a === CLIPPED || b === CLIPPED) { state[i] = CLIPPED; clippedCount++; }
+    else { values[i] = current.values[i] - reference.values[i]; validCount++; }
+  }
+  return { values, state, validCount, maskedCount, clippedCount };
 }
-function quantileSorted(sorted: number[]) {
+
+function validValues(difference: Difference) {
+  const out = new Float64Array(difference.validCount);
+  let n = 0;
+  for (let i = 0; i < difference.values.length; i++) if (difference.state[i] === VALID) out[n++] = difference.values[i];
+  return out;
+}
+
+/** Symmetric grey range: the `quantile` of |Δ| over valid pixels. */
+export function greyLimit(difference: Difference, quantile = 0.995) {
+  return absoluteQuantile(validValues(difference), difference.validCount, quantile) || Number.EPSILON;
+}
+
+/** Grey rendering: 128 = no change, white = brighter now, black = brighter in the reference; excluded pixels transparent. */
+export function renderGrey(difference: Difference, limit: number): Uint8ClampedArray<ArrayBuffer> {
+  const rgba = new Uint8ClampedArray(difference.values.length * 4);
+  for (let i = 0; i < difference.values.length; i++) {
+    if (difference.state[i] !== VALID) continue;
+    const g = Math.round(127.5 + 127.5 * Math.max(-1, Math.min(1, difference.values[i] / limit)));
+    const p = i * 4; rgba[p] = rgba[p + 1] = rgba[p + 2] = g; rgba[p + 3] = 255;
+  }
+  return rgba;
+}
+
+/** σ = 1.4826·MAD of valid differences and their median (the common level offset); null when undefined or zero. */
+export function robustSigma(difference: Difference): { sigma: number; median: number } | null {
+  if (difference.validCount < 16) return null;
+  const sorted = validValues(difference).sort();
+  const median = middle(sorted);
+  const sigma = 1.4826 * middle(sorted.map(v => Math.abs(v - median)).sort());
+  return Number.isFinite(sigma) && sigma > 0 ? { sigma, median } : null;
+}
+function middle(sorted: Float64Array) {
   const mid = sorted.length >> 1;
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
@@ -107,22 +148,36 @@ export function divergingColor(t: number): [number, number, number] {
   return [0, 1, 2].map(c => Math.round(NEUTRAL[c] + (end[c] - NEUTRAL[c]) * a)) as [number, number, number];
 }
 
-/**
- * RGBA rendering with a ±k·σ symmetric scale around `offset` (the median difference, so a uniform
- * level change does not swamp local changes); missing data keep the pipeline's checkerboard.
- */
-export function renderDifference(result: DifferenceResult, sigma: number, k: number, offset = 0): Uint8ClampedArray<ArrayBuffer> {
-  const out = new Uint8ClampedArray(result.values.length * 4), limit = k * sigma;
-  for (let row = 0; row < result.height; row++) for (let x = 0; x < result.width; x++) {
-    const i = row * result.width + x, v = result.values[i];
-    const [r, g, b] = Number.isFinite(v) ? divergingColor((v - offset) / limit) : (() => { const c = checkerGray(x, row, result.height); return [c, c, c]; })();
-    out[i * 4] = r; out[i * 4 + 1] = g; out[i * 4 + 2] = b; out[i * 4 + 3] = 255;
+/** Colour rendering, ±k·σ around `offset` (the median difference) so a uniform level change does not swamp local ones. */
+export function renderDiverging(difference: Difference, sigma: number, k: number, offset = 0): Uint8ClampedArray<ArrayBuffer> {
+  const rgba = new Uint8ClampedArray(difference.values.length * 4), limit = k * sigma;
+  for (let i = 0; i < difference.values.length; i++) {
+    if (difference.state[i] !== VALID) continue;
+    const [r, g, b] = divergingColor((difference.values[i] - offset) / limit);
+    const p = i * 4; rgba[p] = r; rgba[p + 1] = g; rgba[p + 2] = b; rgba[p + 3] = 255;
   }
-  return out;
+  return rgba;
 }
 
-export function differenceSummary(result: DifferenceResult) {
-  let finite = 0, clipped = 0;
-  for (let i = 0; i < result.values.length; i++) if (Number.isFinite(result.values[i])) { finite++; if (result.clipped[i]) clipped++; }
-  return { finite, clipped_fraction: finite ? clipped / finite : 0 };
+/**
+ * current − reference for two RGBA greyscale images of identical size.
+ * Masks are the RGBA quality overlays (alpha > 0 = flagged or missing); pass null when absent.
+ */
+export function differenceImage(
+  current: Uint8ClampedArray, reference: Uint8ClampedArray,
+  currentMask: Uint8ClampedArray | null, referenceMask: Uint8ClampedArray | null,
+  scale: DisplayScale, quantile = 0.995,
+): DifferenceResult {
+  if (current.length !== reference.length || current.length % 4 !== 0) throw Error("Frames differ in size");
+  for (const mask of [currentMask, referenceMask]) if (mask && mask.length !== current.length) throw Error("Mask differs in size");
+  const difference = subtractFrames(decodeFrame(current, currentMask, scale), decodeFrame(reference, referenceMask, scale));
+  const limit = greyLimit(difference, quantile);
+  return { rgba: renderGrey(difference, limit), limit, validCount: difference.validCount, maskedCount: difference.maskedCount, clippedCount: difference.clippedCount };
+}
+
+/** Display scale of a manifest, or null when the stretch cannot be inverted safely. */
+export function manifestScale(display: { low_MJy_sr: number; high_MJy_sr: number; [key: string]: unknown }): DisplayScale | null {
+  const stretch = display.stretch === "asinh" ? Number(display.stretch_parameter) : NaN;
+  const low = display.low_MJy_sr, high = display.high_MJy_sr;
+  return Number.isFinite(low) && Number.isFinite(high) && high > low && Number.isFinite(stretch) && stretch > 0 ? { low, high, stretch } : null;
 }

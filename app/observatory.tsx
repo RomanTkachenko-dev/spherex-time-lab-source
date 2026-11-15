@@ -16,11 +16,12 @@ import { isProperMotion } from "@/lib/ephemeris";
 import SkyAtlas from "./sky-atlas";
 import { projectGaia, type GaiaReference } from "@/lib/gaia";
 import { readDisplayAsset } from "@/lib/frame-assets";
+import { decodeFrame, greyLimit, manifestScale, medianFrame, renderDiverging, renderGrey, robustSigma, subtractFrames, type DisplayScale } from "@/lib/difference";
+import { selectAcrossTime } from "@/lib/field-query";
 import { restoreActiveSession, saveSession, updateSessionView, type SavedSession, type SessionView } from "@/lib/sessions";
 import SessionLibrary from "./session-library";
+import { BENCHMARK_TARGETS, annualMotion, benchmarkSearch } from "@/lib/benchmark-targets";
 import FrameNavigation from "./frame-navigation";
-import { useDifference, MEDIAN_SAMPLE } from "./use-difference";
-import { displayStretch } from "@/lib/difference";
 import { DIFFERENCE_SCALES, type CompareMode, type DifferenceReference } from "@/lib/session-model";
 import ScienceLab from "./science-lab";
 
@@ -74,13 +75,120 @@ function TimelineMarks({ frames }: { frames: Frame[] }) {
   return <canvas ref={canvas} className="time-markers" aria-hidden="true"/>;
 }
 
-function SkyFrame({ frame, mode, marker, mask, label, field, moving, gaia, imageOverride, status }: { frame: Frame; mode: Mode; marker: boolean; mask: boolean; label: string; field: number; moving: boolean; gaia: GaiaReference | null; imageOverride?: string; status?: string }) {
+function frameSources(frame: Frame, mode: Mode) {
+  const image = mode === "sky" ? frame.image : frame.object_image;
+  const mask = mode === "object" ? frame.object_quality_mask_image ?? frame.quality_mask_image ?? image.replace(/\.png$/,"-mask.png") : frame.quality_mask_image ?? image.replace(/\.png$/,"-mask.png");
+  return { image, mask };
+}
+
+/** Decode a 256×256 display PNG (data:, public path or blob URL) into RGBA pixels. */
+function loadPixels(src: string): Promise<Uint8ClampedArray> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context || canvas.width !== 256 || canvas.height !== 256) { reject(Error("Unsupported display PNG")); return; }
+      try { context.drawImage(image, 0, 0); resolve(context.getImageData(0, 0, canvas.width, canvas.height).data); }
+      catch (error) { reject(error); }
+    };
+    image.onerror = () => reject(Error("Display PNG failed to load"));
+    image.src = publicAsset(src);
+  });
+}
+/** Local IndexedDB references need an object URL for the duration of the decode. */
+async function loadDisplayPixels(reference: string) {
+  if (!reference.startsWith("idb:")) return loadPixels(reference);
+  const url = URL.createObjectURL(await readDisplayAsset(reference));
+  try { return await loadPixels(url); } finally { URL.revokeObjectURL(url); }
+}
+
+/** Image and quality-mask pixels for every listed frame; `pixels` is null until all have loaded. */
+function useFramePixels(frames: Frame[], mode: Mode) {
+  const sources = frames.map(frame => frameSources(frame, mode));
+  const key = sources.map(s => s.image + "|" + s.mask).join("\n");
+  const [state, setState] = useState<{key:string;pixels:{image:Uint8ClampedArray;mask:Uint8ClampedArray}[]|null;failed:boolean}>({key:"",pixels:null,failed:false});
+  useEffect(() => {
+    if (!key) return;
+    let active = true;
+    Promise.all(key.split("\n").map(async line => {
+      const [image, mask] = line.split("|");
+      return { image: await loadDisplayPixels(image), mask: await loadDisplayPixels(mask) };
+    })).then(pixels => { if (active) setState({key, pixels, failed:false}); })
+      .catch(() => { if (active) setState({key, pixels:null, failed:true}); });
+    return () => { active = false; };
+  }, [key]);
+  return state.key === key ? state : {key, pixels:null, failed:false};
+}
+
+function GaiaCircles({ gaia, field, mjd, colour, label }: { gaia: GaiaReference; field: number; mjd: number; colour: string; label: string }) {
+  const points = gaia.sources.flatMap(source => { const p = projectGaia(source, gaia.center_ra, gaia.center_dec, field, mjd); return p ? [{ source, ...p }] : []; });
+  if (!points.length) return null;
+  return <svg className="gaia-overlay" role="img" focusable="false" viewBox="0 0 256 256" aria-label={label}>{points.map(({source,x,y})=><circle key={source.source_id} cx={x} cy={y} r="2" fill="none" stroke={colour} strokeWidth="0.8"/>)}</svg>;
+}
+
+/** Bounded median stack keeps decode time predictable for long series. */
+const MEDIAN_SAMPLE = 31;
+type DifferenceScaleMode = "grey" | "colour";
+function differenceReferences(frames: Frame[], index: number, reference: number, kind: DifferenceReference): Frame[] {
+  if (kind === "previous") return index > 0 ? [frames[index - 1]] : [];
+  if (kind === "median") return selectAcrossTime(frames, MEDIAN_SAMPLE);
+  return frames[reference] ? [frames[reference]] : [];
+}
+
+/**
+ * current − reference, where the reference is one exposure or the per-pixel median of the series.
+ * Grey: range from the 99.5th percentile of |Δ|. Colour: ±k·σ (MAD) around the median offset.
+ */
+function DifferenceFrame({ frame, references, kind, mode, scale, field, gaia, render, k }: { frame: Frame; references: Frame[]; kind: DifferenceReference; mode: Mode; scale: DisplayScale; field: number; gaia: GaiaReference | null; render: DifferenceScaleMode; k: number }) {
   const t = useTranslation();
-  const referenceSrc = mode === "sky" ? frame.image : frame.object_image;
-  const override = imageOverride !== undefined;
-  const imageAsset = useDisplaySource(referenceSrc, !override);
-  const src = override ? imageOverride : imageAsset.source;
-  const overlayReference = mode === "object" ? frame.object_quality_mask_image ?? frame.quality_mask_image ?? referenceSrc.replace(/\.png$/,"-mask.png") : frame.quality_mask_image ?? referenceSrc.replace(/\.png$/,"-mask.png");
+  const loaded = useFramePixels([frame, ...references], mode);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const sameFrame = references.length === 1 && references[0].id === frame.id;
+  const computed = useMemo(() => {
+    if (!loaded.pixels || loaded.pixels.length < 2 || sameFrame) return null;
+    const [current, ...rest] = loaded.pixels.map(p => decodeFrame(p.image, p.mask, scale));
+    const difference = subtractFrames(current, rest.length === 1 ? rest[0] : medianFrame(rest));
+    if (render === "colour") {
+      const robust = robustSigma(difference);
+      return robust ? { difference, rgba: renderDiverging(difference, robust.sigma, k, robust.median), range: k * robust.sigma, robust } : { difference, rgba: null, range: 0, robust: null };
+    }
+    const limit = greyLimit(difference);
+    return { difference, rgba: renderGrey(difference, limit), range: limit, robust: null };
+  }, [loaded.pixels, scale, render, k, sameFrame]);
+  useEffect(() => {
+    const node = canvas.current, context = node?.getContext("2d");
+    if (!node || !context || !computed?.rgba) return;
+    node.width = node.height = 256;
+    context.putImageData(new ImageData(computed.rgba, 256, 256), 0, 0);
+  }, [computed]);
+  const result = computed?.difference;
+  const empty = result?.validCount === 0;
+  const total = result ? result.validCount + result.maskedCount + result.clippedCount : 0;
+  const excluded = result && total ? (100 * (result.maskedCount + result.clippedCount) / total).toFixed(1) : null;
+  const single = references.length === 1 ? references[0] : null;
+  const caption = kind === "median" ? t("Різниця: поточний − медіана серії") : kind === "previous" ? t("Різниця: поточний − попередній") : t("Різниця: поточний − опорний");
+  const unavailable = sameFrame ? t("Опорний кадр збігається з поточним. Виберіть інший опорний кадр.") : !references.length ? t("Для першого кадру немає попереднього.") : computed && !computed.rgba ? t("Недостатньо придатних пікселів, щоб оцінити σ різниці.") : "";
+  return <figure className="sky-frame difference-frame">
+    <figcaption><span>{caption}</span><time>{frame.date.slice(0,10)} − {single ? single.date.slice(0,10) : references.length ? t("{0} кадрів", references.length) : "—"}</time></figcaption>
+    <div className="image-space"><div className="sky-plane difference-plane">
+      <canvas style={{visibility: computed?.rgba && !empty ? "visible" : "hidden"}} ref={canvas} width={256} height={256} role="img" aria-label={t("Різницеве зображення двох кадрів SPHEREx")}/>
+      {unavailable && <div className="asset-loading" role="status">{unavailable}</div>}
+      {!unavailable && empty && <div className="asset-loading" role="status">{t("Немає спільних придатних пікселів.")}</div>}
+      {!unavailable && !computed && !loaded.failed && <div className="asset-loading" role="status">{kind === "median" ? t("Обчислення медіани серії з PNG…") : t("Обчислення різниці…")}</div>}
+      {gaia && mode === "sky" && <>{single && <GaiaCircles gaia={gaia} field={field} mjd={single.mjd} colour="#e58ad8" label={`Gaia DR3, MJD ${single.mjd.toFixed(5)}`}/>}<GaiaCircles gaia={gaia} field={field} mjd={frame.mjd} colour="#68d8e5" label={`Gaia DR3, MJD ${frame.mjd.toFixed(5)}`}/></>}
+    </div>{loaded.failed && <div className="image-error" role="alert">{t("Не вдалося прочитати кадр або маску якості.")}</div>}<div className="orientation" title={t("Північ угорі, схід ліворуч")}>N ↑<br/>E ←</div><span className="field-size">{t("Поле ≈")} {(field * 60).toFixed(1)}′</span></div>
+    {computed?.rgba && <div className={`difference-scale ${render === "grey" ? "is-grey" : ""}`} role="img" aria-label={t("Шкала різниці")}><span>−{computed.range.toFixed(3)}</span><i/><span>+{computed.range.toFixed(3)} MJy/sr</span>{computed.robust && <span className="difference-offset">{t("Центр шкали — медіанний зсув")} {computed.robust.median >= 0 ? "+" : "−"}{Math.abs(computed.robust.median).toFixed(3)}</span>}</div>}
+    <p className="difference-legend"><strong>{t("Візуальна різниця PNG. Форма джерел і спектральний відгук кадрів можуть відрізнятися.")}</strong> {render === "grey" ? t("Білий — яскравіше в поточному кадрі, чорний — в опорному, сірий — без змін. Рухомий об’єкт дає пару «чорна пляма — біла пляма». Клітинки — виключені пікселі (прапорці якості, відсутні дані або обрізання шкалою).") : t("Помаранчевий — яскравіше в поточному кадрі, синій — тьмяніше; шкала ±kσ, σ = 1,4826·MAD. Клітинки — виключені пікселі (прапорці якості, відсутні дані або обрізання шкалою).")}{kind === "median" && ` ${t("Медіана {0} кадрів, рівномірно за часом; рухомий об’єкт у неї не потрапляє.", references.length)}`}{excluded !== null && ` ${t("Виключено")}: ${excluded}%.`}{gaia && mode === "sky" && single && ` ${t("Кола Gaia DR3: блакитні — епоха поточного кадру, рожеві — опорного.")}`}</p>
+  </figure>;
+}
+
+function SkyFrame({ frame, mode, marker, mask, label, field, moving, gaia }: { frame: Frame; mode: Mode; marker: boolean; mask: boolean; label: string; field: number; moving: boolean; gaia: GaiaReference | null }) {
+  const t = useTranslation();
+  const { image: referenceSrc, mask: overlayReference } = frameSources(frame, mode);
+  const imageAsset = useDisplaySource(referenceSrc);
+  const src = imageAsset.source;
   const overlayAsset = useDisplaySource(overlayReference,mask);
   const overlaySrc = overlayAsset.source;
   const point = mode === "sky" ? frame.marker_sky : frame.marker_object;
@@ -149,7 +257,7 @@ function ObservatoryView({language, link, switchLanguage}: {
   const [playing, setPlaying] = useState(false), [delay, setDelay] = useState("900");
   const [mode, setMode] = useState<Mode>("sky");
   const [compare, setCompare] = useState(false), [marker, setMarker] = useState(true), [mask, setMask] = useState(false);
-  const [compareMode, setCompareMode] = useState<CompareMode>("side"), [diffReference, setDiffReference] = useState<DifferenceReference>("reference"), [diffK, setDiffK] = useState(5);
+  const [compareMode, setCompareMode] = useState<CompareMode>("side"), [diffReference, setDiffReference] = useState<DifferenceReference>("reference"), [diffK, setDiffK] = useState(5), [diffScale, setDiffScale] = useState<DifferenceScaleMode>("grey");
   const [blinkRunning, setBlinkRunning] = useState(true), [blinkPeriod, setBlinkPeriod] = useState("600"), [blinkReference, setBlinkReference] = useState(false);
   const [gaiaEnabled, setGaiaEnabled] = useState(false), [gaia, setGaia] = useState<GaiaReference|null>(null), [gaiaLoading, setGaiaLoading] = useState(false), [gaiaError, setGaiaError] = useState("");
   const [exportBusy,setExportBusy]=useState(false),[exportError,setExportError]=useState("");
@@ -194,11 +302,11 @@ function ObservatoryView({language, link, switchLanguage}: {
   const frame = data?.frames[index], refFrame = data?.frames[reference];
   const differenceMode = compare && compareMode === "difference";
   const blinkMode = compare && compareMode === "blink";
-  const canDifference = !!data && !!displayStretch(data.display as Parameters<typeof displayStretch>[0]);
-  const diffImage = useDifference({ enabled: differenceMode && canDifference, manifest: data, index, reference, kind: diffReference, mode, k: diffK });
+  const displayScale = useMemo(() => data ? manifestScale(data.display) : null, [data]);
+  const diffReferences = data && differenceMode ? differenceReferences(data.frames, index, reference, diffReference) : [];
   // The frame actually compared: the previous exposure in that difference mode, otherwise the chosen reference.
   const comparedFrame = differenceMode && diffReference === "previous" ? data?.frames[index - 1] : refFrame;
-  const medianRange = differenceMode && diffReference === "median" && diffImage.reference_frames.length ? diffImage.reference_frames.reduce<[number,number]>((r,f)=>[Math.min(r[0],f.wavelength_um),Math.max(r[1],f.wavelength_um)],[Infinity,-Infinity]) : null;
+  const medianRange = differenceMode && diffReference === "median" && diffReferences.length ? diffReferences.reduce<[number,number]>((r,f)=>[Math.min(r[0],f.wavelength_um),Math.max(r[1],f.wavelength_um)],[Infinity,-Infinity]) : null;
   const difference = frame && comparedFrame && !medianRange ? spectralDifference(frame, comparedFrame) : null;
   const usesReferenceFrame = compare && !(differenceMode && diffReference !== "reference");
   const selectFrame = (value: number) => { setPlaying(false); setIndex(value); };
@@ -217,7 +325,7 @@ function ObservatoryView({language, link, switchLanguage}: {
     const m=session.manifest,v=session.view;
     gaiaRequest.current?.abort();setPlaying(false);setData(m);setSessionId(session.id);
     setIndex(Math.max(0,m.frames.findIndex(f=>f.id===v.frame_id)));setReference(Math.max(0,m.frames.findIndex(f=>f.id===v.reference_id)));
-    setMode(v.mode);setCompare(v.compare);setCompareMode(v.compare_mode??"side");setDiffReference(v.difference_reference??"reference");setDiffK(v.difference_k??5);setBlinkReference(false);setMask(v.quality_overlay===true);setMarker(m.kind==="field"?v.centre_marker!==false:v.predicted_marker!==false);
+    setMode(v.mode);setCompare(v.compare);setCompareMode(v.compare_mode??"side");setDiffReference(v.difference_reference??"reference");setDiffK(v.difference_k??5);setDiffScale(v.difference_scale??"grey");setBlinkReference(false);setMask(v.quality_overlay===true);setMarker(m.kind==="field"?v.centre_marker!==false:v.predicted_marker!==false);
     setGaiaEnabled(v.gaia_enabled===true&&!!m.gaia_reference);setGaia(m.gaia_reference??null);setGaiaLoading(false);setGaiaError("");setSessionError("");setSessionRevision(r=>r+1);
   }
   async function flushView(){const current=currentSession.current;if(current.id&&current.view)await updateSessionView(current.id,current.view);}
@@ -232,7 +340,7 @@ function ObservatoryView({language, link, switchLanguage}: {
     viewer.current?.scrollIntoView({behavior:'smooth',block:'start'});
   }
   async function openSession(session:SavedSession){await flushView();applySession(session);}
-  const exportView:SessionView|null = frame ? {frame_id:frame.id,mode,compare,reference_id:refFrame?.id??null,predicted_marker:!field&&marker,centre_marker:!!field&&marker,quality_overlay:mask,gaia_enabled:gaiaEnabled,compare_mode:compareMode,difference_reference:diffReference,difference_k:diffK} : null;
+  const exportView:SessionView|null = frame ? {frame_id:frame.id,mode,compare,reference_id:refFrame?.id??null,predicted_marker:!field&&marker,centre_marker:!!field&&marker,quality_overlay:mask,gaia_enabled:gaiaEnabled,compare_mode:compareMode,difference_reference:diffReference,difference_k:diffK,difference_scale:diffScale} : null;
   const viewKey=JSON.stringify(exportView);
   useEffect(()=>{
     const view=JSON.parse(viewKey) as SessionView|null;
@@ -282,15 +390,15 @@ function ObservatoryView({language, link, switchLanguage}: {
     {!liveArchive && <p className="intro" role="note">{t("Демонстрація GitHub Pages: небесна мозаїка, серії 3I/ATLAS і DR1 та локальні сесії. Пошук архіву, Gaia та аналіз FITS доступні у серверній версії.")}</p>}
     <SkyAtlas language={language} link={link} manifest={data} onSearch={target => { setPlaying(false); fieldSearch.current?.prepareAt(target); }} onCurrentSeries={() => viewer.current?.scrollIntoView({ behavior: "smooth", block: "start" })}/>
     <div className="workspace">
-      <aside className="library"><div className="section-label">{t("СПОСТЕРЕЖЕННЯ")}</div><h1>{t("Небо в русі")}</h1><p className="intro">{t("Порівнюйте справжні кадри SPHEREx у часі.")}</p><button className={`target ${field?"":"active"}`} onClick={()=>{if(demo.current)void prepared(demo.current).catch(e=>setSessionError(e instanceof Error?e.message:t("Не вдалося зберегти серію.")));}}><Orbit className="target-icon"/><span><strong>3I / ATLAS</strong><small>{t("Готовий приклад · 12 кадрів")}</small></span></button><button className="target" onClick={()=>void openEpochDemo()}><Orbit className="target-icon"/><span><strong>{t("Поле DR1")}</strong><small>{t("4 кадри · серпень 2025 — лютий 2026")}</small></span></button>{field&&<div className="active-field"><strong>{t(data.title)}</strong><small>{t("Поточна серія")}</small></div>}<div className="dataset-details"><span>{data?.frames[0].date.slice(0,10)} — {data?.frames.at(-1)?.date.slice(0,10)}</span><span>{data?.frames.length ?? "—"} {t("кадрів ·")} {frame?.detector ?? "—"}</span><span>{archiveLabel} {t("· інфрачервоне світло")}</span></div>{liveArchive && <FieldSearch controlRef={fieldSearch} onOpen={() => setPlaying(false)} onPrepared={prepared}/>}<SessionLibrary manifest={passportManifest} view={exportView} currentSessionId={sessionId} onLoad={openSession} onSaved={session=>{setSessionId(session.id);setSessionRevision(r=>r+1);}} refreshKey={sessionRevision}/>{sessionError&&<p className="session-error" role="alert">{t(sessionError)}</p>}<div className="library-note"><Telescope size={22}/><p>{t("Почніть із відтворення. Шукайте зміни положень відносно зір на спільному полі неба.")}</p><p>{t("Увімкніть порівняння, щоб розглянути два моменти поруч.")}</p></div><a className="text-link library-source" href={data?.source ?? "https://irsa.ipac.caltech.edu/Missions/spherex.html"} target="_blank" rel="noreferrer">{t("Про цей набір")} <ArrowUpRight size={15}/></a></aside>
+      <aside className="library"><div className="section-label">{t("СПОСТЕРЕЖЕННЯ")}</div><h1>{t("Небо в русі")}</h1><p className="intro">{t("Порівнюйте справжні кадри SPHEREx у часі.")}</p><button className={`target ${field?"":"active"}`} onClick={()=>{if(demo.current)void prepared(demo.current).catch(e=>setSessionError(e instanceof Error?e.message:t("Не вдалося зберегти серію.")));}}><Orbit className="target-icon"/><span><strong>3I / ATLAS</strong><small>{t("Готовий приклад · 12 кадрів")}</small></span></button><button className="target" onClick={()=>void openEpochDemo()}><Orbit className="target-icon"/><span><strong>{t("Поле DR1")}</strong><small>{t("4 кадри · серпень 2025 — лютий 2026")}</small></span></button><div className="benchmark-targets" role="group" aria-label={t("Тестові об’єкти челенджу")}><div className="section-label">{t("ТЕСТОВІ ОБ’ЄКТИ")}</div>{BENCHMARK_TARGETS.map(target=>{const motion=annualMotion(target);return <button key={target.id} type="button" className="target benchmark" disabled={!liveArchive} title={liveArchive?`${target.reference}`:t("Потрібна серверна версія з пошуком архіву.")} onClick={()=>{setPlaying(false);fieldSearch.current?.prepareAt(benchmarkSearch(target));}}><Orbit className="target-icon"/><span><strong>{target.name}</strong><small>{target.kind==="variable"?t("Змінна зоря · яскравість"):`${motion.arcsec.toFixed(1)}″/${t("рік")} ≈ ${motion.pixels.toFixed(1)} ${t("пікс./рік")}`} · D{target.detector}</small></span></button>;})}{!liveArchive&&<p className="benchmark-note">{t("Ці приклади запускають живий пошук архіву, тому працюють лише із серверною частиною.")}</p>}</div>{field&&<div className="active-field"><strong>{t(data.title)}</strong><small>{t("Поточна серія")}</small></div>}<div className="dataset-details"><span>{data?.frames[0].date.slice(0,10)} — {data?.frames.at(-1)?.date.slice(0,10)}</span><span>{data?.frames.length ?? "—"} {t("кадрів ·")} {frame?.detector ?? "—"}</span><span>{archiveLabel} {t("· інфрачервоне світло")}</span></div>{liveArchive && <FieldSearch controlRef={fieldSearch} onOpen={() => setPlaying(false)} onPrepared={prepared}/>}<SessionLibrary manifest={passportManifest} view={exportView} currentSessionId={sessionId} onLoad={openSession} onSaved={session=>{setSessionId(session.id);setSessionRevision(r=>r+1);}} refreshKey={sessionRevision}/>{sessionError&&<p className="session-error" role="alert">{t(sessionError)}</p>}<div className="library-note"><Telescope size={22}/><p>{t("Почніть із відтворення. Шукайте зміни положень відносно зір на спільному полі неба.")}</p><p>{t("Увімкніть порівняння, щоб розглянути два моменти поруч.")}</p></div><a className="text-link library-source" href={data?.source ?? "https://irsa.ipac.caltech.edu/Missions/spherex.html"} target="_blank" rel="noreferrer">{t("Про цей набір")} <ArrowUpRight size={15}/></a></aside>
       <section className="lab-main" ref={viewer} tabIndex={0} aria-label={t("Переглядач. Стрілки змінюють кадр, пробіл запускає відтворення.")}>
         <div className="workspace-heading"><div><div className="section-label">{t("РЕАЛЬНІ ДАНІ / SPHEREx")} {archiveLabel}</div><h2>{data ? t(data.title) : "SPHEREx"}</h2></div><div className="passport-actions"><button className="button" type="button" onClick={()=>void downloadPassport()} disabled={!data||exportBusy} title={data?.schema_version===4||data?.display.asset_storage==="indexeddb-sha256-v1"?t("JSON містить хеші PNG, які зберігаються локально в цьому браузері."):t("Завантажити перевірений науковий паспорт.")}><Download size={16}/>{exportBusy?t("Формуємо…"):t("Завантажити паспорт серії")}</button>{exportError&&<span className="passport-error" role="alert">{t(exportError)}</span>}</div></div>
         <div className="viewer-panel"><div className="viewer-toolbar">{field&&!moving?<span className="view-label">{t("Спільне поле ICRS")}</span>:<Tabs value={mode} onValueChange={v => setMode(v as Mode)}><TabsList><TabsTrigger value="sky">{moving?t("Нерухоме поле"):t("Нерухоме небо")}</TabsTrigger><TabsTrigger value="object">{moving?t("За ціллю"):t("За кометою")}</TabsTrigger></TabsList></Tabs>}<span className="frame-count" aria-live={playing ? "off" : "polite"}>{data ? `${String(index + 1).padStart(2, "0")} / ${data.frames.length}` : "—"}</span></div>
-          <div className="view-options"><div className="compare-mode" role="group" aria-label={t("Порівняння кадрів")}><span>{t("Порівняти")}</span>{([["off",t("Вимкнено")],["side",t("Поруч")],["blink",t("Blink")],["difference",t("Різниця")]] as const).map(([value,label])=>{const active=value==="off"?!compare:compare&&compareMode===value;const unavailable=value==="difference"&&!canDifference;return <button key={value} type="button" className={active?"selected":""} aria-pressed={active} disabled={!data||unavailable} title={unavailable?t("Ця серія не має відомої шкали яскравості для відновлення різниці."):undefined} onClick={()=>{if(value==="off")setCompare(false);else{setCompare(true);setCompareMode(value);setBlinkReference(false);}}}>{label}</button>;})}</div><label><Switch checked={marker} onCheckedChange={setMarker}/>{field?(data?.query?.most?t("Позиція MOST"):isProperMotion(data?.query?.ephemeris)?t("Позиція за власним рухом"):data?.query?.ephemeris?t("Позиція Horizons"):t("Центр запиту")):t("Прогноз IRSA")}</label>{liveArchive&&field&&mode==="sky"&&<label><Switch checked={gaiaEnabled} onCheckedChange={value=>void toggleGaia(value)}/>{t("Каталог Gaia DR3")}</label>}<label><Switch checked={mask} onCheckedChange={setMask}/>{t("Шар якості")}</label></div>
+          <div className="view-options"><label><Switch checked={compare} onCheckedChange={setCompare} disabled={!data}/>{t("Порівняти")}</label><label><Switch checked={marker} onCheckedChange={setMarker}/>{field?(data?.query?.most?t("Позиція MOST"):isProperMotion(data?.query?.ephemeris)?t("Позиція за власним рухом"):data?.query?.ephemeris?t("Позиція Horizons"):t("Центр запиту")):t("Прогноз IRSA")}</label>{liveArchive&&field&&mode==="sky"&&<label><Switch checked={gaiaEnabled} onCheckedChange={value=>void toggleGaia(value)}/>{t("Каталог Gaia DR3")}</label>}<label><Switch checked={mask} onCheckedChange={setMask}/>{t("Шар якості")}</label></div>
           {field&&mode==="sky"&&gaiaEnabled&&<div className="gaia-status" role="status">{gaiaLoading?t("Запит Gaia DR3 до IRSA TAP…"):gaiaError?t(gaiaError):gaia&&<><span>{t("Повернуто")} {gaia.record_count} {t("джерел Gaia DR3 у пошуковому конусі")}{gaia.truncated?t("; є додаткові збіги поза лімітом 1200"):""}{t(". Епоха проєкції: поточний кадр MJD")} {frame?.mjd.toFixed(5)??"—"}{compare&&refFrame&&t("; опорний кадр MJD {0}", refFrame.mjd.toFixed(5))}{t(". Координати перераховуються для кожного кадру за власним рухом.")}</span><details><summary>{t("Метод і межі каталогу")}</summary><p>{t("Вибірка містить до 1200 джерел із виміряною зоряною величиною G, упорядкованих за її зростанням. Координати поширюються сталою власного руху з епохи ref_epoch; якщо компоненти руху відсутні, показується початкова каталожна позиція. У моделі не застосовано паралакс, променеву швидкість або коваріації. Символи показують каталожні позиції Gaia, а не виявлення SPHEREx чи астрометричне вимірювання цього конвеєра.")}</p></details></>}</div>}
-          {frame && data ? <div className={`frame-stage ${compare && compareMode === "side" ? "is-comparing" : ""}`}>{blinkMode && refFrame ? <BlinkStage frame={frame} refFrame={refFrame} showReference={blinkReference} mode={mode} marker={marker} mask={mask} field={mode === "sky" ? data.display.sky_fov_deg : data.display.object_fov_deg} moving={moving} gaia={field&&gaiaEnabled&&mode==="sky"?gaia:null}/> : <SkyFrame frame={frame} mode={mode} marker={marker} mask={mask} label={differenceMode ? `${t("Різниця")} · ${t("поточний")} − ${diffReference==="median"?t("медіана серії"):diffReference==="previous"?t("попередній"):t("опорний")}` : t("Поточний кадр")} field={mode === "sky" ? data.display.sky_fov_deg : data.display.object_fov_deg} moving={moving} gaia={field&&gaiaEnabled&&mode==="sky"?gaia:null} imageOverride={differenceMode ? diffImage.url : undefined} status={differenceMode ? (diffImage.status==="error" ? diffImage.error : diffReference==="median" ? t("Обчислення медіани серії з PNG…") : t("Обчислення різниці з PNG…")) : undefined}/>}{compare && compareMode === "side" && refFrame && <SkyFrame frame={refFrame} mode={mode} marker={marker} mask={mask} label={t("Опорний кадр")} field={mode === "sky" ? data.display.sky_fov_deg : data.display.object_fov_deg} moving={moving} gaia={field&&gaiaEnabled&&mode==="sky"?gaia:null}/>}</div> : <div className="viewer-empty" role="status">{error ? <><p>{t(error)}</p><button className="button" onClick={() => setAttempt(a => a + 1)}>{t("Спробувати ще раз")}</button></> : <><Skeleton className="h-64 w-64"/><p>{t("Завантаження спостережень…")}</p></>}</div>}
+          {frame && data ? <div className={`frame-stage ${compare && compareMode !== "blink" ? "is-comparing" : ""}`}>{blinkMode && refFrame ? <BlinkStage frame={frame} refFrame={refFrame} showReference={blinkReference} mode={mode} marker={marker} mask={mask} field={mode === "sky" ? data.display.sky_fov_deg : data.display.object_fov_deg} moving={moving} gaia={field&&gaiaEnabled&&mode==="sky"?gaia:null}/> : <SkyFrame frame={frame} mode={mode} marker={marker} mask={mask} label={t("Поточний кадр")} field={mode === "sky" ? data.display.sky_fov_deg : data.display.object_fov_deg} moving={moving} gaia={field&&gaiaEnabled&&mode==="sky"?gaia:null}/>}{differenceMode && displayScale ? <DifferenceFrame frame={frame} references={diffReferences} kind={diffReference} mode={mode} scale={displayScale} field={mode === "sky" ? data.display.sky_fov_deg : data.display.object_fov_deg} gaia={field&&gaiaEnabled&&mode==="sky"?gaia:null} render={diffScale} k={diffK}/> : compare && compareMode === "side" && refFrame && <SkyFrame frame={refFrame} mode={mode} marker={marker} mask={mask} label={t("Опорний кадр")} field={mode === "sky" ? data.display.sky_fov_deg : data.display.object_fov_deg} moving={moving} gaia={field&&gaiaEnabled&&mode==="sky"?gaia:null}/>}</div> : <div className="viewer-empty" role="status">{error ? <><p>{t(error)}</p><button className="button" onClick={() => setAttempt(a => a + 1)}>{t("Спробувати ще раз")}</button></> : <><Skeleton className="h-64 w-64"/><p>{t("Завантаження спостережень…")}</p></>}</div>}
           {blinkMode && <div className="compare-controls blink-controls"><button className="button" type="button" onClick={()=>setBlinkRunning(v=>!v)} aria-pressed={!blinkRunning}>{blinkRunning?<Pause size={15}/>:<Play size={15}/>}{blinkRunning?t("Зупинити blink"):t("Запустити blink")}</button><button className="button" type="button" onClick={()=>{setBlinkRunning(false);setBlinkReference(v=>!v);}}>{t("Показати інший кадр")}</button><span className="blink-now" aria-live="polite">{blinkReference?t("Опорний кадр"):t("Поточний кадр")}</span><label>{t("Період")}<select value={blinkPeriod} onChange={e=>setBlinkPeriod(e.target.value)}><option value="300">0.3 {t("с")}</option><option value="600">0.6 {t("с")}</option><option value="1000">1 {t("с")}</option></select></label></div>}
-          {differenceMode && <div className="compare-controls difference-controls"><label>{t("Віднімати")}<select value={diffReference} onChange={e=>setDiffReference(e.target.value as DifferenceReference)}><option value="reference">{t("Опорний кадр")}</option><option value="median">{t("Медіана серії")}</option><option value="previous">{t("Попередній кадр")}</option></select></label><label>{t("Шкала")}<select value={diffK} onChange={e=>setDiffK(Number(e.target.value))}>{DIFFERENCE_SCALES.map(k=><option key={k} value={k}>±{k}σ</option>)}</select></label>{diffImage.status==="ready"&&<div className="difference-legend" role="img" aria-label={t("Шкала різниці")}><span>−{(diffK*diffImage.sigma).toFixed(3)}</span><i/><span>+{(diffK*diffImage.sigma).toFixed(3)} MJy/sr</span></div>}{diffImage.status==="ready"&&<span className="difference-offset">{t("Центр шкали — медіанний зсув")} {diffImage.median_offset>=0?"+":"−"}{Math.abs(diffImage.median_offset).toFixed(3)} MJy/sr</span>}{diffImage.status==="ready"&&<p className="difference-note">σ = {diffImage.sigma.toFixed(4)} MJy/sr (1.4826·MAD){diffReference==="median"?` · ${t("медіана")} ${diffImage.reference_frames.length} ${t("кадрів, рівномірно за часом")}${data&&data.frames.length>MEDIAN_SAMPLE?` (${t("з")} ${data.frames.length})`:""}`:""}. {t("Помаранчевий — яскравіше в поточному кадрі, синій — тьмяніше.")} {t("Відновлено з 8-бітних PNG спільної шкали серії, не фотометрія.")}{diffImage.clipped_fraction>0.01?` ${t("Біля меж шкали обрізано")} ${(diffImage.clipped_fraction*100).toFixed(1)}% ${t("пікселів; там різниця є лише оцінкою межі.")}`:""}</p>}{diffImage.status==="error"&&<p className="error-message" role="alert">{t(diffImage.error)}</p>}</div>}
+          {compare && data && <div className="compare-controls"><div className="compare-style" role="radiogroup" aria-label={t("Спосіб порівняння")}>{([["side",t("Поруч")],["blink",t("Blink")],["difference",t("Різниця")]] as const).map(([value,label])=><button key={value} type="button" role="radio" aria-checked={compareMode===value} className={`button ${compareMode===value?"active":""}`} onClick={()=>{setCompareMode(value);setBlinkReference(false);}} disabled={value==="difference"&&!displayScale} title={value==="difference"&&!displayScale?t("Для цієї серії шкала яскравості невідома, тому різницю не обчислити."):undefined}>{label}</button>)}</div>{differenceMode && <div className="difference-controls"><label>{t("Віднімати")}<select value={diffReference} onChange={e=>setDiffReference(e.target.value as DifferenceReference)}><option value="reference">{t("Опорний кадр")}</option><option value="median">{t("Медіана серії")}</option><option value="previous">{t("Попередній кадр")}</option></select></label><label>{t("Шкала")}<select value={diffScale === "grey" ? "grey" : String(diffK)} onChange={e=>{if(e.target.value==="grey")setDiffScale("grey");else{setDiffScale("colour");setDiffK(Number(e.target.value));}}}><option value="grey">{t("Сіра · 99,5% |Δ|")}</option>{DIFFERENCE_SCALES.map(k=><option key={k} value={k}>{t("Кольорова · ±{0}σ", k)}</option>)}</select></label></div>}</div>}
           {compare && frame && comparedFrame && difference && <div className="compare-controls" aria-label={t("Різниця між кадрами")}>
             <div>{t("Різниця часу")} <strong>{formatInterval(frame.mjd - comparedFrame.mjd, t)}</strong></div>
             <div>{t("Різниця довжини хвилі")} <strong>≈ {difference.delta.toFixed(4)} {t("мкм")}</strong></div>

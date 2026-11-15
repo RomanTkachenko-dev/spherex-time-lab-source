@@ -21,7 +21,7 @@ const barnardXml = `<?xml version="1.0" encoding="UTF-8"?>
 const reference = { ra: 269.4520769586187, dec: 4.69336496657667, pm_ra_masyr: -798.6, pm_dec_masyr: 10328, epoch_jyear: 2000 };
 const dates = { start: "2025-08-01", end: "2026-02-28" };
 const model = { reference, model: "linear-proper-motion-v1", frame: "ICRS", time_scale: "UTC" };
-const sesame = { ...model, source: "Proper motion (CDS Sesame)", target_name: "NAME Barnard's star", query_name: "Barnard's Star", resolver: "S=Simbad, IDIA (via url)", motion_reference: "2020yCat.1350....0G", retrieved_at: "2026-11-14T18:00:00Z" };
+const sesame = { ...model, source: "Proper motion (CDS Sesame)", source_url: sesameUrl("Barnard's Star"), target_name: "NAME Barnard's star", query_name: "Barnard's Star", resolver: "S=Simbad, IDIA (via url)", motion_reference: "2020yCat.1350....0G", retrieved_at: "2026-11-14T18:00:00Z" };
 const field = { ...dates, detector: 5, fov: 0.12, max_frames: 4, release: "dr1", survey: "wide" };
 
 test("Sesame parser returns SIMBAD proper motion at epoch J2000 and ignores it for other resolvers", () => {
@@ -54,7 +54,9 @@ test("daily proper-motion track covers the inclusive UTC interval and validates 
   const between = interpolateEphemeris(points, 60900.37)!;
   assert.ok(angularSeparationDeg(between, propagateProperMotion(reference, 60900.37)) * 3600 < 1e-3);
   assert.ok(properMotionTrack(reference, "2020-01-01", "2029-12-31").length <= 1001);
-  const query = validateFieldQuery({ ...field, ephemeris: { ...sesame, points, source_url: "https://attacker.invalid/" } });
+  const query = validateFieldQuery({ ...field, ephemeris: { ...sesame, points, source_url: sesameUrl("Barnard's Star") } });
+  assert.equal(validateFieldQuery({ ...field, ephemeris: { ...sesame, points, source_url: sesameUrl("Barnard's Star", 2) } }).ephemeris?.source_url, "https://vizier.cfa.harvard.edu/viz-bin/nph-sesame/-oxp/SN?Barnard's+Star", "a mirror that answered is kept as provenance");
+  for (const source_url of ["https://attacker.invalid/", sesameUrl("Other star"), undefined]) assert.throws(() => validateFieldQuery({ ...field, ephemeris: { ...sesame, points, source_url } }), /Sesame/);
   assert.ok(angularSeparationDeg(query, reference) * 3600 > 260, "field centre follows the star, not its J2000 position");
   assert.ok(query.ephemeris?.source === "Proper motion (CDS Sesame)" && query.ephemeris.source_url === sesameUrl("Barnard's Star"));
   assert.deepEqual(query.ephemeris.reference, reference);
