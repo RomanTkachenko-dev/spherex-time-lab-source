@@ -5,6 +5,7 @@
 // wavelength → довжина хвилі, quality overlay → шар якості, series metadata → паспорт серії.
 
 export const ukrainian: Record<string, string> = {
+  "Blink": "Чергування",
   // ── Common ───────────────────────────────────────────────────────────────
   "Close": "Закрити",
   "Cancel": "Скасувати",
