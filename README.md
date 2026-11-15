@@ -41,7 +41,7 @@ The per-track Gaia search records individual catalogue queries, truncation and f
 
 ## Site structure
 
-The GitHub Pages build has an overview page at the site root, the lab under `lab/` and an About page under `about/`. The static pages live in `pages/` and share `pages/site.css`. Old links that pass lab parameters to the root (for example `?ra=…&dec=…`) are forwarded to `lab/` with the same query.
+The GitHub Pages build has an overview page at the site root, the lab under `lab/`, a Method page under `method/` and an About page under `about/`. The static pages live in `pages/` and share `pages/site.css`. Old links that pass lab parameters to the root (for example `?ra=…&dec=…`) are forwarded to `lab/` with the same query.
 
 ## Deep links and embedding
 

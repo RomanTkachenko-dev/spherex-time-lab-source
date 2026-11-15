@@ -19,6 +19,7 @@ export default defineConfig({
     rollupOptions: { input: {
       overview: resolve("pages/index.html"),
       lab: resolve("pages/lab/index.html"),
+      method: resolve("pages/method/index.html"),
       about: resolve("pages/about/index.html"),
     } },
   },

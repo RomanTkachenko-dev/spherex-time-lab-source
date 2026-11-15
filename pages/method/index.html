@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Method · SPHEREx Time Lab</title>
+  <meta name="description" content="Step-by-step method of SPHEREx Time Lab, what existed before and what we added, and the canonical SPHEREx papers.">
+  <meta name="theme-color" content="#F7F3E6">
+  <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="/site.css">
+</head><body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap header-row">
+      <a class="brand" href="../">
+        <img src="/assets/folder.svg" alt="" width="40" height="40">
+        <span><b>SPHEREx Time Lab</b><small>NASA Space Apps Challenge 2026</small></span>
+      </a>
+      <nav class="tabs" aria-label="Main">
+        <a class="tab" href="../"><span class="tab-no">01</span>Overview</a>
+        <a class="tab" href="../lab/"><span class="tab-no">02</span>Lab</a>
+        <a class="tab active" aria-current="page" href="../method/"><span class="tab-no">03</span>Method</a>
+        <a class="tab" href="../about/"><span class="tab-no">04</span>About</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <main id="main" class="sheet">
+      <div class="page-intro">
+        <p class="eyebrow">Section 03 · Method</p>
+        <h1 style="font-size:clamp(2rem,4.4vw,3.2rem)">How the Time Lab works, step by step</h1>
+        <p class="lead">What happens between typing a position and seeing a moving dot: where the data come from, what is done to them, what already existed and what we added, and the papers that describe SPHEREx itself.</p>
+        <div class="toc">
+          <a class="btn small ghost" href="#instrument">The instrument</a>
+          <a class="btn small ghost" href="#steps">Our steps</a>
+          <a class="btn small ghost" href="#before-after">Before and proposed</a>
+          <a class="btn small ghost" href="#limits">Limits</a>
+          <a class="btn small ghost" href="#papers">Papers</a>
+        </div>
+      </div>
+
+      <section id="instrument">
+        <p class="eyebrow">Background</p>
+        <h2>What SPHEREx records</h2>
+        <div class="grid three">
+          <div class="folder paper"><span class="label">Survey</span>
+            <h3>Four all-sky maps</h3>
+            <p>Launched on 11 March 2025, SPHEREx began science operations on 1 May 2025. Over its 25-month prime mission it maps the whole sky four times, roughly once every six months, with much deeper coverage near the ecliptic poles.</p>
+          </div>
+          <div class="folder paper"><span class="label">Spectra</span>
+            <h3>102 channels, 0.75–5 µm</h3>
+            <p>Six H2RG detectors sit under linear variable filters, so the wavelength changes across each detector and every pixel samples one wavelength. Resolving power is about 35–130. Detector pairs 1–4, 2–5 and 3–6 see the same sky at once.</p>
+          </div>
+          <div class="folder paper"><span class="label">Pixels</span>
+            <h3>6.15″ per pixel</h3>
+            <p>Each detector covers about 3.5° × 3.5°. The point spread function is undersampled by design: two stars closer than a few arcseconds blend into one spot, so precise positions come from Gaia, while SPHEREx measures brightness.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="steps">
+        <p class="eyebrow">Our steps</p>
+        <h2>From a position to a measurement</h2>
+        <ol class="step-list prose">
+          <li><h3>Choose a field</h3>
+            <p>The field centre is an ICRS position in degrees. Names are resolved with CDS Sesame; if the main CDS host does not answer, two VizieR mirrors are tried. The five challenge test targets start from catalogue positions moved with their proper motions to the middle of the search window, so that fast stars stay inside the field.</p></li>
+          <li><h3>Find exposures</h3>
+            <p>The lab queries the IRSA image service for SPHEREx Data Release 1 (or Quick Release 3) spectral images covering the position, for one detector and a range of UTC dates. When there are more matches than the series limit, frames are picked evenly in time and the rest are listed as excluded.</p></li>
+          <li><h3>Read the calibrated FITS files</h3>
+            <p>Each cutout keeps the archive’s calibrated image in MJy/sr, its per-pixel quality flags, the variance map and the spectral WCS that gives the wavelength of every pixel. Nothing is measured on display images.</p></li>
+          <li><h3>Put frames on one grid</h3>
+            <p>For display, all frames are resampled onto one north-up tangent-plane grid of 256 × 256 pixels and drawn with the same asinh brightness scale (limits from the 12th and 99.7th percentiles of the whole series). A shared scale means that a change in brightness on screen is not caused by the display.</p></li>
+          <li><h3>Blink</h3>
+            <p>Frames play in UTC order. Because of the linear variable filters, a position is usually seen at a different wavelength on each date, so the lab shows the time and wavelength difference between any two frames.</p></li>
+          <li><h3>Subtract <span class="tag new">proposed by us</span></h3>
+            <p>The difference view converts the grey levels of both frames back to MJy/sr through the shared stretch and subtracts them. Pixels flagged in either frame, missing, or saturated by the stretch are excluded and shown as a checker pattern. Fixed stars cancel; a moving object leaves a dark spot where it was and a bright spot where it is.</p></li>
+          <li><h3>Overlay Gaia DR3</h3>
+            <p>Gaia DR3 positions (epoch J2016.0) are moved with constant proper motion to the time of each frame. In the difference view they are drawn for both dates, so a proper-motion pair lines up with two circles. Parallax is not applied; for these targets it is below one SPHEREx pixel.</p></li>
+          <li><h3>Measure</h3>
+            <p>In the science lab, a pixel-convolved point spread function and a planar background are fitted to the original pixels, weighted by the variance map. Results come with flux errors, positions, the wavelength of the fit and a quality flag (reduced χ² ≤ 3 and signal-to-noise ≥ 5). The same measurements build spectra and light curves.</p></li>
+          <li><h3>Check candidates</h3>
+            <p>A track is associated with a Gaia DR3 star only if one star lies within the search radius at every detection epoch, with at least three independent epochs. Known asteroids and comets are checked against JPL predictions computed from the spacecraft’s own position.</p></li>
+          <li><h3>Keep the provenance</h3>
+            <p>Every series records archive queries, dataset DOIs, calibration and method versions, file checksums and its stated limitations, and can be downloaded as a record.</p></li>
+        </ol>
+      </section>
+
+      <section id="before-after">
+        <p class="eyebrow">Before and proposed</p>
+        <h2>What already existed, and what we added</h2>
+        <div class="compare">
+          <div class="folder paper"><span class="label">Already available</span>
+            <h3>At IRSA</h3>
+            <ul>
+              <li>DR1, QR2 and QR3 spectral images, the DR1 all-sky cube and its HiPS maps.</li>
+              <li>SPHEREx Data Explorer for searching and viewing images.</li>
+              <li>Spectrophotometry, Cutout, Mosaic and Source Discovery tools.</li>
+              <li>The Moving Object Search Tool (MOST) for known solar system objects.</li>
+              <li>Python notebooks and cloud access on AWS.</li>
+            </ul>
+            <h3>In the first version of the lab</h3>
+            <ul>
+              <li>Sky globe on the DR1 cube, archive search and blink player.</li>
+              <li>Side-by-side comparison of two frames and a quality-flag overlay.</li>
+              <li>Gaia DR3 overlay, point-source photometry, spectra and light curves.</li>
+              <li>Candidate tracks, local sessions, deep links and embedding.</li>
+            </ul>
+          </div>
+          <div class="folder green"><span class="label">What we proposed</span>
+            <h3>Merged into the lab</h3>
+            <ul>
+              <li><span class="tag new">new</span>Difference images in MJy/sr, with Gaia drawn at both epochs.</li>
+              <li><span class="tag new">new</span>One-click presets for the five challenge test targets, with proper motion applied.</li>
+              <li><span class="tag new">new</span>Name lookup that falls back to Sesame mirrors.</li>
+            </ul>
+            <h3>In this round</h3>
+            <ul>
+              <li>Montserrat and JetBrains Mono, a blue accent, and aligned icons.</li>
+              <li>An overview page, this method page and an About page.</li>
+            </ul>
+            <h3>Next steps</h3>
+            <ul>
+              <li>Stacking all frames of one visit for better signal-to-noise.</li>
+              <li>Adjustable brightness stretch and an AllWISE overlay.</li>
+              <li>Injecting fake movers to measure how faint and slow an object the lab can still recover.</li>
+            </ul>
+          </div>
+        </div>
+        <p class="muted" style="margin-top:1.2rem">IRSA’s tools serve researchers who already know what they are looking for. The Time Lab adds one fast path for everyone: enter a position, watch it change, and see whether the change is real.</p>
+      </section>
+
+      <section id="limits" class="prose">
+        <p class="eyebrow">Limits</p>
+        <h2>What the lab does not claim</h2>
+        <ul>
+          <li>Display images are resampled for viewing only; numbers come from the original pixels.</li>
+          <li>Frames from different dates usually sample different wavelengths, so stars of different colours can leave residuals in a difference image even if nothing changed.</li>
+          <li>Photometric errors include pixel noise but not calibration systematics.</li>
+          <li>Associations with Gaia are positional, not confirmed identities. Candidates are for further checking, not discoveries.</li>
+          <li>Over the first year and a half, Barnard’s Star moves about 2.5 SPHEREx pixels and Epsilon Indi B about one, so motion is clearest between the first and last frames.</li>
+        </ul>
+      </section>
+
+      <section id="papers">
+        <p class="eyebrow">Canonical papers</p>
+        <h2>The papers behind SPHEREx</h2>
+        <p class="lead" style="margin-bottom:1.4rem">IRSA lists four canonical papers for the mission. Summaries below are ours; follow the links for the abstracts and full texts.</p>
+        <div class="grid two">
+          <div class="folder paper paper-card"><span class="label">Mission</span>
+            <h3>The SPHEREx Satellite Mission</h3>
+            <p class="refs">Bock, J. J. et al. 2026, ApJ, 999, 139 · <a href="https://ui.adsabs.harvard.edu/abs/2026ApJ...999..139B/abstract" rel="noopener">ADS</a> · <a href="https://arxiv.org/abs/2511.02985" rel="noopener">arXiv:2511.02985</a> · <a href="https://doi.org/10.3847/1538-4357/ae2be2" rel="noopener">DOI</a></p>
+            <p>The overview of the first all-sky near-infrared spectral survey: 102 bands from 0.75 to 5.0 µm at resolving power 35–130 in 6.2″ pixels. After four full-sky maps over two years the expected 5σ point-source depth is about 19.5–19.9 AB mag below 3.8 µm and 17.8–18.8 AB mag above it. The paper connects the three science themes (inflation, galaxy evolution through intensity mapping, interstellar ices) to the design of the instrument and spacecraft and reports first in-flight performance.</p>
+          </div>
+          <div class="folder paper paper-card"><span class="label">Pipeline</span>
+            <h3>The SPHEREx Image and Spectrophotometry Processing Pipeline</h3>
+            <p class="refs">Akeson, R. et al. 2026, ApJS, 285, 67 · <a href="https://ui.adsabs.harvard.edu/abs/2026ApJS..285...67A/abstract" rel="noopener">ADS</a> · <a href="https://arxiv.org/abs/2511.15823" rel="noopener">arXiv:2511.15823</a></p>
+            <p>How the SPHEREx Science Data Center at Caltech/IPAC turns raw exposures into flux- and wavelength-calibrated spectral images and photometry, and which data products reach the archive. This is the source of the images, flags, variance maps and spectral WCS that the Time Lab reads.</p>
+          </div>
+          <div class="folder paper paper-card"><span class="label">Sky Simulator</span>
+            <h3>The SPHEREx Sky Simulator</h3>
+            <p class="refs">Crill, B. P. et al. 2025, ApJS, 281, 10 · <a href="https://ui.adsabs.harvard.edu/abs/2025ApJS..281...10C/abstract" rel="noopener">ADS</a> · <a href="https://arxiv.org/abs/2505.24856" rel="noopener">arXiv:2505.24856</a></p>
+            <p>A model of what SPHEREx would see, built from astrophysical emission, instrument properties and the survey plan, including noise and systematics. It was used before launch to predict science performance and to develop the pipeline. The pre-launch 5σ sensitivity estimate was about 18.5–19 AB mag from 0.75 to 3.8 µm and 16.6–18 AB mag from 3.8 to 5 µm, limited by zodiacal light.</p>
+          </div>
+          <div class="folder paper paper-card"><span class="label">Instrument &amp; calibration</span>
+            <h3>The SPHEREx Instrument: calibration, testing and performance</h3>
+            <p class="refs">Korngut, P. M. et al. 2026, arXiv:2603.29835 · <a href="https://ui.adsabs.harvard.edu/abs/2026arXiv260329835K/abstract" rel="noopener">ADS</a> · <a href="https://arxiv.org/abs/2603.29835" rel="noopener">arXiv</a></p>
+            <p>The full test campaign of the instrument, from individual components in the laboratory to in-orbit commissioning, traced back to the requirements of each science goal. The authors report that the instrument, now in full survey mode, meets its requirements for optical performance, point-source sensitivity, thermal stability and correlated noise.</p>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:2rem">
+          <p><b>Acknowledgement.</b> This publication makes use of data products from the Spectro-Photometer for the History of the Universe, Epoch of Reionization and Ices Explorer (SPHEREx), which is a joint project of the Jet Propulsion Laboratory and the California Institute of Technology, and is funded by the National Aeronautics and Space Administration.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer class="site-footer">
+    <div class="wrap footer-row">
+      <p>© <span data-year>2026</span> SPHEREx Time Lab · NASA Space Apps Challenge 2026. Not an official NASA product.</p>
+      <nav aria-label="Footer">
+        <a href="../lab/">Open the lab</a>
+        <a href="../method/">Method</a>
+        <a href="../about/">About</a>
+        <a href="https://github.com/RomanTkachenko-dev/spherex-time-lab-source" rel="noopener">Source code</a>
+        <a href="https://irsa.ipac.caltech.edu/Missions/spherex.html" rel="noopener">SPHEREx at IRSA</a>
+      </nav>
+    </div>
+  </footer>
+  <script>document.querySelectorAll('[data-year]').forEach(function (el) { el.textContent = new Date().getFullYear(); });</script>
+</body>
+</html>
