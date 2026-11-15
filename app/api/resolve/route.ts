@@ -10,12 +10,28 @@ export async function GET(request: Request) {
     return Response.json({ error: "Введіть назву астрономічного об’єкта (до 128 символів)." }, { status: 400 });
   }
 
-  const source = new URL("https://cds.unistra.fr/cgi-bin/nph-sesame/-oxp/SN");
-  source.search = encodeURIComponent(name).replace(/%20/g, "+");
+  // Sesame mirrors: the main CDS host sometimes rejects or drops requests from cloud workers.
+  const mirrors = [
+    "https://cds.unistra.fr/cgi-bin/nph-sesame/-oxp/SN",
+    "https://vizier.cds.unistra.fr/viz-bin/nph-sesame/-oxp/SN",
+    "https://vizier.cfa.harvard.edu/viz-bin/nph-sesame/-oxp/SN",
+  ];
+  const query = encodeURIComponent(name).replace(/%20/g, "+");
+  let source = new URL(mirrors[0]), response: Response | null = null, reachable = false;
+  for (const mirror of mirrors) {
+    source = new URL(mirror); source.search = query;
+    try {
+      const attempt = await fetch(source, { signal: AbortSignal.timeout(8000), headers: { Accept: "application/xml, text/xml", "User-Agent": "SPHEREx-Time-Lab/1.0 (+https://github.com/RomanTkachenko-dev/spherex-time-lab-source)" } });
+      reachable = true;
+      if (attempt.ok) { response = attempt; break; }
+    } catch { /* try the next mirror */ }
+  }
+  if (!response) {
+    return Response.json({ error: reachable ? "Служба астрономічних назв тимчасово недоступна." : "Не вдалося зв’язатися зі службою астрономічних назв. Спробуйте ще раз або введіть RA та Dec вручну." }, { status: 502 });
+  }
   try {
-    const response = await fetch(source, { signal: AbortSignal.timeout(10000), headers: { Accept: "application/xml, text/xml" } });
     const declaredLength = Number(response.headers.get("Content-Length"));
-    if (!response.ok || (Number.isFinite(declaredLength) && declaredLength > 128_000)) {
+    if (Number.isFinite(declaredLength) && declaredLength > 128_000) {
       return Response.json({ error: "Служба астрономічних назв тимчасово недоступна." }, { status: 502 });
     }
     const xml = await response.text();
