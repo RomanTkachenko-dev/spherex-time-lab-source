@@ -348,7 +348,7 @@ export const ukrainian: Record<string, string> = {
   "Pause the exposure sequence": "Зупинити часову послідовність",
   "Play the exposure sequence": "Відтворити часову послідовність",
   "Exposure time on the globe": "Час експозицій на сфері",
-  "The green outline is the area the selected exposure covers (from IRSA). Pixel quality is checked separately.": "Зелений контур — геометрична межа вибраної експозиції з IRSA; придатність пікселів перевіряється окремо.",
+  "The blue outline is the area the selected exposure covers (from IRSA). Pixel quality is checked separately.": "Синій контур — геометрична межа вибраної експозиції з IRSA; придатність пікселів перевіряється окремо.",
   "No supported ICRS outline is available for this exposure, so none is drawn.": "Для цієї експозиції немає підтримуваного контуру ICRS. Межі не домальовуються.",
   "Playback shows one exposure per second, whatever the real time gaps.": "Анімація змінює експозиції щосекунди, незалежно від реальних проміжків.",
   "Compare with exposure": "Порівняти з експозицією",
