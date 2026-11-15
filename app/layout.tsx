@@ -3,8 +3,8 @@ import "./globals.css";
 import "./observatory.css";
 
 export const metadata: Metadata = {
-  title: "SPHEREx Time Lab — небо в русі",
-  description: "Реальні спостереження SPHEREx у часі. Переглядайте кадри й перевіряйте походження даних.",
+  title: "SPHEREx Time Lab: the sky in motion",
+  description: "Compare real NASA SPHEREx infrared exposures of the same patch of sky over time.",
   icons: {
     icon: "/icon.svg",
     shortcut: "/icon.svg",
@@ -17,7 +17,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="uk">
+    <html lang="en">
       <body className="antialiased">{children}</body>
     </html>
   );

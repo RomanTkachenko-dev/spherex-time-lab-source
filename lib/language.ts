@@ -1,164 +1,32 @@
 "use client";
-import { createContext, useContext } from "react";
+import { createContext, useCallback, useContext } from "react";
+import { ukrainian } from "./i18n/uk";
+import { translateRuntime } from "./i18n/runtime";
+
 export type Language = "en" | "uk";
+export type Vars = Record<string, string | number>;
 export const LanguageContext = createContext<Language>("en");
-const english: Record<string, string> = {
-  "Немає спільних придатних пікселів.": "No usable pixels are shared by these exposures.",
-  "Візуальна різниця PNG. Форма джерел і спектральний відгук кадрів можуть відрізнятися.": "Visual PNG difference. Source profiles and spectral responses can differ between exposures.",
-  "Не вдалося прочитати кадр або маску якості.": "Could not read an exposure or its quality mask.",
-  "Закрити": "Close",
-  "Завантажимо два вибрані кадри та відкриємо їх поруч. Вимірювання виконуються на окремих FITS, не на фоновій мозаїці.": "Load the two selected exposures side by side. Measurements use individual FITS files.",
-  "Перевірте покриття центра карти, щоб побачити контур експозиції та її час. Відсутність контуру до запиту не означає відсутності спостережень.": "Search the map center to see exposure footprints and times.",
-  "За цими умовами каталог не повернув експозицій. Змініть період, детектор або ділянку.": "No exposures found. Change the dates, detector, or field.",
-  "Зелений контур — геометрична межа вибраної експозиції з IRSA; придатність пікселів перевіряється окремо.": "The green IRSA footprint marks geometric coverage. Pixel quality is checked separately.",
-  "Для цієї експозиції немає підтримуваного контуру ICRS. Межі не домальовуються.": "No supported ICRS footprint is available for this exposure.",
-  "Анімація змінює експозиції щосекунди, незалежно від реальних проміжків.": "Playback advances once per second regardless of the actual intervals.",
-  "Цей канал порожній в опублікованій мозаїці IRSA. Це не відсутність об’єктів.": "This plane is blank in the published IRSA mosaic.",
-  "Час експозицій на сфері": "Exposure time on globe",
-  "Зупинити часову послідовність": "Pause playback",
-  "Відтворити часову послідовність": "Play exposures",
-  "Виберіть перевірене поле або задайте координати": "Choose an example field or enter coordinates",
-  "День початку й завершення за UTC": "Start and end dates in UTC",
-  "Наукова лабораторія": "Science laboratory",
-  "Вимірювання · спектр · кандидати": "Measurements · spectrum · candidates",
-  "мкм": "µm",
-  "хв": "min",
-  "Мова": "Language",
-  "Тестові об’єкти челенджу": "Challenge test targets",
-  "ТЕСТОВІ ОБ’ЄКТИ": "TEST TARGETS",
-  "Змінна зоря · яскравість": "Variable star · brightness",
-  "рік": "yr",
-  "пікс./рік": "px/yr",
-  "Потрібна серверна версія з пошуком архіву.": "Requires the server version with archive search.",
-  "Ці приклади запускають живий пошук архіву, тому працюють лише із серверною частиною.": "These examples run a live archive search, so they need the server part.",
-  "Небесна сфера": "Sky globe",
-  "ОГЛЯД НЕБА · ICRS": "SKY SURVEY · ICRS",
-  "Оберніть небо. Оберіть ділянку. Знайдіть її спостереження.": "Choose a patch of sky and find its exposures.",
-  "Згорнути карту": "Collapse map",
-  "Розгорнути карту": "Expand map",
-  "Координати RA, Dec": "RA, Dec coordinates",
-  "Об’єкт або координати": "Object or coordinates",
-  "Знайти на сфері": "Find on globe",
-  "Перетягуйте небо для обертання, прокручуйте для масштабу. Натисніть на точку, щоб поставити її в центр.": "Drag to pan, scroll to zoom, or click a point to center it.",
-  "Фон неба": "Sky background",
-  "SPHEREx DR1 · інфрачервона мозаїка": "SPHEREx DR1 · infrared mosaic",
-  "DSS2 · оптичний огляд": "DSS2 · optical survey",
-  "Центр карти · ICRS": "Map center · ICRS",
-  "Поле відкритої серії": "Center on current series",
-  "Від · UTC": "From · UTC",
-  "До · UTC": "To · UTC",
-  "Реліз": "Release",
-  "Огляд": "Survey",
-  "Детектор": "Detector",
-  "Покриття центра SPHEREx": "Find SPHEREx coverage",
-  "Перевіряємо архів…": "Checking the archive…",
-  "Скасувати пошук": "Cancel search",
-  "Інтерактивна карта неба з контурами SPHEREx": "Interactive sky map with SPHEREx footprints",
-  "Завантаження небесної сфери…": "Loading sky globe…",
-  "Повторити запуск карти": "Retry map",
-  "Наблизити небо": "Zoom in",
-  "Віддалити небо": "Zoom out",
-  "Півсфера": "Hemisphere",
-  "До знайденого поля": "Center on results",
-  "Експозиція": "Exposure",
-  "Порівняти з експозицією": "Compare with exposure",
-  "Вихідний FITS ↗": "Original FITS ↗",
-  "Відкрити порівняння реальних кадрів": "Open exposure comparison",
-  "Джерела каталогу": "Catalogue sources",
-  "До відкритої часової серії": "Go to current series",
-  "Сферична навігація → експозиції → вимірювання": "Sky navigation → exposures → measurements",
-  "Некоректні координати в URL. Використано початкове поле.": "Invalid coordinates in URL. Showing the default field.",
-  "Лабораторія змін неба": "Sky changes lab",
-  "Архів NASA / IPAC": "NASA / IPAC archive",
-  "СПОСТЕРЕЖЕННЯ": "OBSERVATIONS",
-  "Небо в русі": "Sky in motion",
-  "Порівнюйте справжні кадри SPHEREx у часі.": "Compare real SPHEREx exposures over time.",
-  "Готовий приклад · 12 кадрів": "Example · 12 exposures",
-  "Поле DR1": "DR1 field",
-  "4 кадри · серпень 2025 — лютий 2026": "4 exposures · August 2025 – February 2026",
-  "Поточна серія": "Current series",
-  "Про цей набір": "About this dataset",
-  "Завантажити паспорт серії": "Download series metadata",
-  "Формуємо…": "Preparing…",
-  "Спільне поле ICRS": "Shared ICRS field",
-  "Порівняти": "Compare",
-  "Нерухоме небо": "Fixed sky",
-  "За кометою": "Track comet",
-  "Прогноз IRSA": "IRSA prediction",
-  "Центр запиту": "Query center",
-  "Шар якості": "Quality overlay",
-  "Каталог Gaia DR3": "Gaia DR3 catalogue",
-  "Поточний кадр": "Current exposure",
-  "Опорний кадр": "Reference exposure",
-  "Різниця часу": "Time difference",
-  "Різниця довжини хвилі": "Wavelength difference",
-  "Повільно": "Slow",
-  "Звичайно": "Normal",
-  "Швидко": "Fast",
-  "Відтворити": "Play",
-  "Пауза": "Pause",
-  "Попередній кадр": "Previous exposure",
-  "Наступний кадр": "Next exposure",
-  "ПАСПОРТ КАДРУ": "EXPOSURE METADATA",
-  "Від зображення": "From image",
-  "до джерела": "to source",
-  "Середина спостереження · UTC": "Exposure midpoint · UTC",
-  "Технічні метадані": "Technical metadata",
-  "Вихідний FITS": "Original FITS",
-  "FITS-вирізка": "FITS cutout",
-  "Спробувати ще раз": "Try again",
-  "Завантаження спостережень…": "Loading exposures…",
-  "Час і спектр змінюються разом": "Time and wavelength both change",
-  "Знайти кадри": "Find exposures",
-  "Знайти спостереження неба": "Search sky observations",
-  "Часова серія": "Time series",
-  "Окремі експозиції": "Individual exposures",
-  "Ділянка неба": "Sky field",
-  "Мої координати": "Custom coordinates",
-  "Рухома ціль": "Moving target",
-  "Або введіть назву об’єкта": "Or enter an object name",
-  "Період спостережень": "Observation dates",
-  "Від": "From",
-  "До · включно": "To · inclusive",
-  "Наукові параметри": "Science options",
-  "Реліз продуктів": "Data release",
-  "Тип огляду": "Survey type",
-  "Поле зору · градуси": "Field of view · degrees",
-  "Спектральний інтервал · мкм": "Wavelength range · µm",
-  "Показати часову серію": "Build time series",
-  "Перевіряємо архів і готуємо кадри…": "Checking the archive and preparing exposures…",
-  "Продовжити": "Resume",
-  "Призупинити": "Pause",
-  "Скасувати й видалити": "Cancel and delete",
-  "Збережені обчислення": "Saved jobs",
-  "Номер кадру": "Exposure number",
-  "Перейти": "Go",
-  "Найближчий до часу UTC": "Nearest UTC time",
-  "Знайти": "Find",
-  "Номер опорного кадру": "Reference exposure number",
-  "Обрати": "Select",
-  "Локальні сесії": "Local sessions",
-  "Зберегти поточну": "Save current series",
-  "Експорт пакета": "Export bundle",
-  "Імпорт пакета": "Import bundle",
-  "Скасувати": "Cancel",
-  "Відкрити": "Open",
-  "Як читати ці кадри": "How to read these images",
-  "Відкриті дані. Простежувані джерела.": "Open data with traceable sources.",
-  "Різниця: поточний − опорний": "Difference: current − reference",
-  "Різницеве зображення двох кадрів SPHEREx": "Difference image of two SPHEREx exposures",
-  "Обчислення різниці…": "Computing difference…",
-  "Не вдалося прочитати кадри для різниці.": "Could not read the frames for the difference.",
-  "Білий — яскравіше в поточному кадрі, чорний — в опорному, сірий — без змін. Рухомий об’єкт дає пару «чорна пляма — біла пляма». Клітинки — виключені пікселі (прапорці якості, відсутні дані або обрізання шкалою).": "White: brighter in the current frame; black: brighter in the reference; grey: no change. A moving object leaves a black–white pair. Checkered pixels are excluded (quality flags, missing data or display clipping).",
-  "Виключено": "Excluded",
-  "Кола Gaia DR3: блакитні — епоха поточного кадру, рожеві — опорного.": "Gaia DR3 circles: cyan at the current epoch, pink at the reference epoch.",
-  "Спосіб порівняння": "Comparison style",
-  "Поруч": "Side by side",
-  "Різниця": "Difference",
-  "Для цієї серії шкала яскравості невідома, тому різницю не обчислити.": "This series has no known brightness scale, so a difference cannot be computed.",
-  "Дослідницька версія · 0.10": "Research version · 0.10"
-};
+
+/** English is the source language. Ukrainian comes from the dictionary; missing entries fall back to English. */
+export function translate(language: Language, text: string, vars?: Vars) {
+  const template = language === "uk" ? ukrainian[text] ?? text : text;
+  return vars ? template.replace(/\{(\w+)\}/g, (match, key: string) => key in vars ? String(vars[key]) : match) : template;
+}
+
+export function useLanguage() {
+  return useContext(LanguageContext);
+}
+
 export function useTranslation() {
   const language = useContext(LanguageContext);
-  return (text: string) => language === "en" ? english[text] ?? text : text;
+  return useCallback((text: string, vars?: Vars) => translate(language, text, vars), [language]);
+}
+
+/**
+ * Messages produced by the science code, workers and API are Ukrainian at the source.
+ * They are translated only here, at display time; the producers stay untouched.
+ */
+export function useMessage() {
+  const language = useContext(LanguageContext);
+  return useCallback((message: string | null | undefined) => message ? translateRuntime(language, message) : "", [language]);
 }
