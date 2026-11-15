@@ -43,3 +43,4 @@
 .compare-style .button.active:hover{background:#86baf5;color:#0f1720}.compare-style .button:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 
 button,input,select,textarea{font-family:inherit}h1,h2,h3{letter-spacing:-.02em}
+.button svg,.text-link svg,.icon-button svg,.target svg,.view-options svg,.compare-style svg{flex-shrink:0;display:block}.button svg{width:16px;height:16px}.text-link svg{width:14px;height:14px}.icon-button svg{width:18px;height:18px}.target>.target-icon{margin-left:0;width:22px;height:22px;flex:0 0 22px}.target>span{flex:1;min-width:0}.target>svg:not(.target-icon){margin-left:auto}.spectral-notice>svg{width:18px;height:18px;margin-top:3px}.brand svg{flex-shrink:0}
