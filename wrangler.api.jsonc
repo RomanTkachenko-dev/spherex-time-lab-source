@@ -3,5 +3,13 @@
   "main": "api-worker/index.ts",
   "compatibility_date": "2026-05-01",
   "workers_dev": true,
-  "vars": { "SITE_ORIGIN": "https://romantkachenko-dev.github.io" }
+  "vars": { "SITE_ORIGIN": "https://romantkachenko-dev.github.io" },
+  // Per-IP limits on edge-cache misses (requests that reach IRSA/CDS).
+  // SITE_LIMITER: requests from SITE_ORIGIN; a 120-frame series needs roughly 130 requests.
+  // OTHER_LIMITER: scripts and other clients without an Origin header.
+  // namespace_id only has to be unique within the Cloudflare account.
+  "ratelimits": [
+    { "name": "SITE_LIMITER", "namespace_id": "2601", "simple": { "limit": 600, "period": 60 } },
+    { "name": "OTHER_LIMITER", "namespace_id": "2602", "simple": { "limit": 30, "period": 60 } }
+  ]
 }

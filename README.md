@@ -39,6 +39,10 @@ To enable live archive access, deploy the API with `npx wrangler deploy --config
 
 The per-track Gaia search records individual catalogue queries, truncation and failures. Its finite padding can miss high proper-motion sources. Candidate detection fits nearby point-source amplitudes and records the peaks omitted by its compute budget. Photometric errors still omit unmeasured systematics. The observer-specific small-body check is described by `research/identify_small_bodies.py`.
 
+## Site structure
+
+The GitHub Pages build has an overview page at the site root, the lab under `lab/` and an About page under `about/`. The static pages live in `pages/` and share `pages/site.css`. Old links that pass lab parameters to the root (for example `?ra=…&dec=…`) are forwarded to `lab/` with the same query.
+
 ## Deep links and embedding
 
 Use decimal ICRS degrees, RA in [0, 360) and Dec in [-90, 90].
@@ -51,6 +55,6 @@ Example iframe:
 
 ```html
 <iframe title="SPHEREx Time Lab"
-  src="https://romantkachenko-dev.github.io/spherex-time-lab-source/?ra=167.2&amp;dec=5.15&amp;start=2025-12-14&amp;end=2025-12-14&amp;detector=5&amp;search=1&amp;embed=1&amp;lang=en"
+  src="https://romantkachenko-dev.github.io/spherex-time-lab-source/lab/?ra=167.2&amp;dec=5.15&amp;start=2025-12-14&amp;end=2025-12-14&amp;detector=5&amp;search=1&amp;embed=1&amp;lang=en"
   width="100%" height="850" loading="lazy"></iframe>
 ```
