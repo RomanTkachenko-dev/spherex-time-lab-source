@@ -16,8 +16,10 @@ import SkyAtlas, { type SkyAtlasControl } from "./sky-atlas";
 import { inPanel, pixelToSky, separationArcmin, skyToPixel } from "@/lib/sky-link";
 import { projectGaia, type GaiaReference } from "@/lib/gaia";
 import { readDisplayAsset } from "@/lib/frame-assets";
+import { differenceImage, manifestScale, type DifferenceResult, type DisplayScale } from "@/lib/difference";
 import { restoreActiveSession, saveSession, updateSessionView, type SavedSession, type SessionView } from "@/lib/sessions";
 import SessionLibrary from "./session-library";
+import { BENCHMARK_TARGETS, annualMotion, benchmarkSearch } from "@/lib/benchmark-targets";
 import FrameNavigation from "./frame-navigation";
 import ScienceLab from "./science-lab";
 import { centredScroll, stripLayout, visibleTiles, STRIP_PAUSE_GAP } from "@/lib/exposure-strip";
@@ -112,12 +114,91 @@ function TimelineMarks({ frames }: { frames: Frame[] }) {
   return <canvas ref={canvas} className="time-markers" aria-hidden="true"/>;
 }
 
+function frameSources(frame: Frame, mode: Mode) {
+  const image = mode === "sky" ? frame.image : frame.object_image;
+  const mask = mode === "object" ? frame.object_quality_mask_image ?? frame.quality_mask_image ?? image.replace(/\.png$/,"-mask.png") : frame.quality_mask_image ?? image.replace(/\.png$/,"-mask.png");
+  return { image, mask };
+}
+
+/** Decode a display PNG into RGBA pixels (null while loading or when unavailable). */
+function useImagePixels(src: string) {
+  const [state, setState] = useState<{src:string;pixels:Uint8ClampedArray|null;failed:boolean}>({src:"",pixels:null,failed:false});
+  useEffect(() => {
+    if (!src) return;
+    let active = true;
+    const image = new Image();
+    image.onload = () => {
+      if (!active) return;
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) { setState({src,pixels:null,failed:true}); return; }
+      if (canvas.width !== 256 || canvas.height !== 256) {
+        setState({src,pixels:null,failed:true});
+        return;
+      }
+      try {
+        context.drawImage(image, 0, 0);
+        setState({src,pixels:context.getImageData(0,0,canvas.width,canvas.height).data,failed:false});
+      } catch {
+        setState({src,pixels:null,failed:true});
+      }
+    };
+    image.onerror = () => { if (active) setState({src,pixels:null,failed:true}); };
+    image.src = publicAsset(src);
+    return () => { active = false; };
+  }, [src]);
+  return state.src === src ? state : {src,pixels:null,failed:false};
+}
+
+function GaiaCircles({ gaia, field, mjd, colour, label }: { gaia: GaiaReference; field: number; mjd: number; colour: string; label: string }) {
+  const points = gaia.sources.flatMap(source => { const p = projectGaia(source, gaia.center_ra, gaia.center_dec, field, mjd); return p ? [{ source, ...p }] : []; });
+  if (!points.length) return null;
+  return <svg className="gaia-overlay" role="img" focusable="false" viewBox="0 0 256 256" aria-label={label}>{points.map(({source,x,y})=><circle key={source.source_id} cx={x} cy={y} r="2" fill="none" stroke={colour} strokeWidth="0.8"/>)}</svg>;
+}
+
+function DifferenceFrame({ frame, reference, mode, scale, field, gaia }: { frame: Frame; reference: Frame; mode: Mode; scale: DisplayScale; field: number; gaia: GaiaReference | null }) {
+  const t = useTranslation();
+  const a = frameSources(frame, mode), b = frameSources(reference, mode);
+  const imageSourceA = useDisplaySource(a.image), imageSourceB = useDisplaySource(b.image);
+  const maskSourceA = useDisplaySource(a.mask), maskSourceB = useDisplaySource(b.mask);
+  const imageA = useImagePixels(imageSourceA.source), imageB = useImagePixels(imageSourceB.source);
+  const maskA = useImagePixels(maskSourceA.source), maskB = useImagePixels(maskSourceB.source);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const result = useMemo<DifferenceResult | null>(() => {
+    if (!imageA.pixels || !imageB.pixels) return null;
+    if (!maskA.pixels || !maskB.pixels) return null;
+    return differenceImage(imageA.pixels, imageB.pixels, maskA.pixels, maskB.pixels, scale);
+  }, [imageA.pixels, imageB.pixels, maskA, maskB, scale]);
+  useEffect(() => {
+    const node = canvas.current, context = node?.getContext("2d");
+    if (!node || !context || !result) return;
+    const size = Math.round(Math.sqrt(result.rgba.length / 4));
+    node.width = node.height = size;
+    context.putImageData(new ImageData(new Uint8ClampedArray(result.rgba), size, size), 0, 0);
+  }, [result]);
+  const failed = [imageA, imageB, maskA, maskB].some(asset => asset.failed) ||
+    [imageSourceA, imageSourceB, maskSourceA, maskSourceB].some(asset => asset.error);
+  const empty = result?.validCount === 0;
+  const total = result ? result.validCount + result.maskedCount + result.clippedCount : 0;
+  const excluded = result && total ? (100 * (result.maskedCount + result.clippedCount) / total).toFixed(1) : null;
+  return <figure className="sky-frame difference-frame">
+    <figcaption><span>{t("Difference: current − reference")}</span><time>{frame.date.slice(0,10)} − {reference.date.slice(0,10)}</time></figcaption>
+    <div className="image-space"><div className="sky-plane difference-plane">
+      <canvas style={{visibility: result && !empty ? "visible" : "hidden"}} ref={canvas} width={256} height={256} role="img" aria-label={t("Difference image of two SPHEREx exposures")}/>
+      {empty && <div className="asset-loading" role="status">{t("These exposures share no usable pixels.")}</div>}
+      {!result && !failed && <div className="asset-loading" role="status">{t("Computing the difference…")}</div>}
+      {gaia && mode === "sky" && <><GaiaCircles gaia={gaia} field={field} mjd={reference.mjd} colour="#e58ad8" label={t("Gaia DR3, reference exposure, MJD {mjd}",{mjd:reference.mjd.toFixed(5)})}/><GaiaCircles gaia={gaia} field={field} mjd={frame.mjd} colour="#68d8e5" label={t("Gaia DR3, current exposure, MJD {mjd}",{mjd:frame.mjd.toFixed(5)})}/></>}
+    </div>{failed && <div className="image-error" role="alert">{t("Could not read an exposure or its quality mask.")}</div>}<div className="orientation" title={t("North is up, east is left (as seen on the sky)")}>N ↑<br/>E ←</div><span className="field-size" title={t("Width of the image in arcminutes (the full Moon is about 30′)")}>{t("Width ≈ {w}′",{w:(field * 60).toFixed(1)})}</span></div>
+    <p className="difference-legend"><strong>{t("A visual difference of the display images. Source shapes and spectral responses can differ between exposures.")}</strong> {t("White: brighter in the current exposure; black: brighter in the reference; grey: no change. A moving object leaves a black–white pair. Checkered pixels are excluded (quality flags, missing data or clipping by the brightness scale).")}{excluded !== null && " " + t("Excluded: {p}%.",{p:excluded})}{gaia && mode === "sky" && " " + t("Gaia DR3 circles: cyan at the current exposure's epoch, pink at the reference's.")}</p>
+  </figure>;
+}
+
 function SkyFrame({ frame, mode, marker, mask, label, field, moving, gaia, globe, onPick }: { frame: Frame; mode: Mode; marker: boolean; mask: boolean; label: string; field: number; moving: boolean; gaia: GaiaReference | null; globe?: { x: number; y: number } | null; onPick?: (x: number, y: number) => void }) {
   const t = useTranslation();
-  const referenceSrc = mode === "sky" ? frame.image : frame.object_image;
+  const { image: referenceSrc, mask: overlayReference } = frameSources(frame, mode);
   const imageAsset = useDisplaySource(referenceSrc);
   const src = imageAsset.source;
-  const overlayReference = mode === "object" ? frame.object_quality_mask_image ?? frame.quality_mask_image ?? referenceSrc.replace(/\.png$/,"-mask.png") : frame.quality_mask_image ?? referenceSrc.replace(/\.png$/,"-mask.png");
   const overlayAsset = useDisplaySource(overlayReference,mask);
   const overlaySrc = overlayAsset.source;
   const point = mode === "sky" ? frame.marker_sky : frame.marker_object;
@@ -172,6 +253,7 @@ function ObservatoryView({language, link, switchLanguage}: {
   const [index, setIndex] = useState(0), [reference, setReference] = useState(8);
   const [playing, setPlaying] = useState(false), [delay, setDelay] = useState("900");
   const [mode, setMode] = useState<Mode>("sky");
+  const [compareStyle, setCompareStyle] = useState<"side"|"difference">("side");
   const [compare, setCompare] = useState(false), [marker, setMarker] = useState(true), [mask, setMask] = useState(false);
   const [gaiaEnabled, setGaiaEnabled] = useState(false), [gaia, setGaia] = useState<GaiaReference|null>(null), [gaiaLoading, setGaiaLoading] = useState(false), [gaiaError, setGaiaError] = useState("");
   const [exportBusy,setExportBusy]=useState(false),[exportError,setExportError]=useState("");
@@ -209,6 +291,8 @@ function ObservatoryView({language, link, switchLanguage}: {
   }, [data]);
   const frame = data?.frames[index], refFrame = data?.frames[reference];
   const difference = frame && refFrame ? spectralDifference(frame, refFrame) : null;
+  const displayScale = useMemo(() => data ? manifestScale(data.display) : null, [data]);
+  const showDifference = compare && compareStyle === "difference" && !!displayScale;
   const selectFrame = (value: number) => { setPlaying(false); setIndex(value); };
   const field = data?.kind === "field";
   const epochDemoOpen = Boolean(field && data && epochDemoFrame.current && data.frames.some(f => f.id === epochDemoFrame.current));
@@ -302,17 +386,21 @@ function ObservatoryView({language, link, switchLanguage}: {
     {!liveArchive && <p className="demo-banner" role="note">{t("Demo version: the sky map, two ready-made examples and saved sessions work here. Archive search, Gaia stars and FITS analysis need the full (server) version.")}</p>}
     <SkyAtlas language={language} link={link} manifest={data} controlRef={atlas} onCenterChange={setGlobeCenter} onSearch={target => { setPlaying(false); fieldSearch.current?.prepareAt(target); }} onCurrentSeries={() => viewer.current?.scrollIntoView({ behavior: "smooth", block: "start" })}/>
     <div className="workspace">
-      <aside className="library"><div className="section-label">{t("STEP 2 · WATCH")}</div><h1>{t("Sky in motion")}</h1><p className="intro">{t("Flip through real NASA SPHEREx pictures of one patch of sky, taken at different times, and see what moved.")}</p><button className={`target ${field?"":"active"}`} aria-pressed={!!data&&!field} onClick={()=>{if(demo.current)void prepared(demo.current).catch(e=>setSessionError(e instanceof Error?e.message:t("Could not save the series.")));}}><Orbit className="target-icon"/><span><strong>3I / ATLAS</strong><small>{t("Comet · 12 exposures in 2 hours")}</small></span></button><button className={`target ${epochDemoOpen?"active":""}`} aria-pressed={epochDemoOpen} onClick={()=>void openEpochDemo()}><Orbit className="target-icon"/><span><strong>{t("DR1 field")}</strong><small>{t("4 exposures · Aug 2025 – Feb 2026")}</small></span></button>{field&&<div className="active-field"><strong>{msg(data.title)}</strong><small>{t("Open now")}</small></div>}<div className="dataset-details"><span>{data?.frames[0].date.slice(0,10)} — {data?.frames.at(-1)?.date.slice(0,10)}</span><span>{t("{n} exposures",{n:data?.frames.length ?? "—"})} · {frame?.detector ?? "—"}</span><span>{archiveLabel} · {t("infrared light")}</span></div>{liveArchive && <FieldSearch controlRef={fieldSearch} onOpen={() => setPlaying(false)} onPrepared={prepared}/>}<SessionLibrary manifest={passportManifest} view={exportView} currentSessionId={sessionId} onLoad={openSession} onSaved={session=>{setSessionId(session.id);setSessionRevision(r=>r+1);}} refreshKey={sessionRevision}/>{sessionError&&<p className="session-error" role="alert">{msg(sessionError)}</p>}<div className="library-note"><Telescope size={22}/><p>{t("Press ▶ to play. Stars stay put; anything that shifts against them (a comet, an asteroid) or changes brightness is worth a closer look.")}</p><p>{t("Turn on Compare to see two moments side by side.")}</p></div><a className="text-link library-source" href={data?.source ?? "https://irsa.ipac.caltech.edu/Missions/spherex.html"} target="_blank" rel="noreferrer">{t("About this dataset")} <ArrowUpRight size={15}/></a></aside>
+      <aside className="library"><div className="section-label">{t("STEP 2 · WATCH")}</div><h1>{t("Sky in motion")}</h1><p className="intro">{t("Flip through real NASA SPHEREx pictures of one patch of sky, taken at different times, and see what moved.")}</p><button className={`target ${field?"":"active"}`} aria-pressed={!!data&&!field} onClick={()=>{if(demo.current)void prepared(demo.current).catch(e=>setSessionError(e instanceof Error?e.message:t("Could not save the series.")));}}><Orbit className="target-icon"/><span><strong>3I / ATLAS</strong><small>{t("Comet · 12 exposures in 2 hours")}</small></span></button><button className={`target ${epochDemoOpen?"active":""}`} aria-pressed={epochDemoOpen} onClick={()=>void openEpochDemo()}><Orbit className="target-icon"/><span><strong>{t("DR1 field")}</strong><small>{t("4 exposures · Aug 2025 – Feb 2026")}</small></span></button><div className="benchmark-targets" role="group" aria-label={t("Challenge test targets")}><div className="section-label">{t("TEST TARGETS")}</div>{BENCHMARK_TARGETS.map(target=>{const motion=annualMotion(target);return <button key={target.id} type="button" className="target benchmark" disabled={!liveArchive} title={liveArchive?`${target.reference}`:t("Needs the full (server) version with archive search.")} onClick={()=>{setPlaying(false);fieldSearch.current?.prepareAt(benchmarkSearch(target));}}><Orbit className="target-icon"/><span><strong>{target.name}</strong><small>{target.kind==="variable"?t("Variable star · brightness changes"):t("{a}″/yr ≈ {p} px/yr",{a:motion.arcsec.toFixed(1),p:motion.pixels.toFixed(1)})} · D{target.detector}</small></span></button>;})}{!liveArchive&&<p className="benchmark-note">{t("These examples run a live archive search, so they need the full (server) version.")}</p>}</div>{field&&<div className="active-field"><strong>{msg(data.title)}</strong><small>{t("Open now")}</small></div>}<div className="dataset-details"><span>{data?.frames[0].date.slice(0,10)} — {data?.frames.at(-1)?.date.slice(0,10)}</span><span>{t("{n} exposures",{n:data?.frames.length ?? "—"})} · {frame?.detector ?? "—"}</span><span>{archiveLabel} · {t("infrared light")}</span></div>{liveArchive && <FieldSearch controlRef={fieldSearch} onOpen={() => setPlaying(false)} onPrepared={prepared}/>}<SessionLibrary manifest={passportManifest} view={exportView} currentSessionId={sessionId} onLoad={openSession} onSaved={session=>{setSessionId(session.id);setSessionRevision(r=>r+1);}} refreshKey={sessionRevision}/>{sessionError&&<p className="session-error" role="alert">{msg(sessionError)}</p>}<div className="library-note"><Telescope size={22}/><p>{t("Press ▶ to play. Stars stay put; anything that shifts against them (a comet, an asteroid) or changes brightness is worth a closer look.")}</p><p>{t("Turn on Compare to see two moments side by side.")}</p></div><a className="text-link library-source" href={data?.source ?? "https://irsa.ipac.caltech.edu/Missions/spherex.html"} target="_blank" rel="noreferrer">{t("About this dataset")} <ArrowUpRight size={15}/></a></aside>
       <section className="lab-main" ref={viewer} tabIndex={0} aria-label={t("Exposure viewer. Arrow keys change the exposure; Space plays or pauses.")}>
         <div className="workspace-heading"><div><div className="section-label">{t("REAL DATA / SPHEREx {release}",{release:archiveLabel})}</div><h2>{data ? msg(data.title) : "SPHEREx"}</h2></div><div className="passport-actions"><button className="button" type="button" onClick={()=>void downloadPassport()} disabled={!data||exportBusy} title={data?.schema_version===4||data?.display.asset_storage==="indexeddb-sha256-v1"?t("The JSON lists hashes of images that are stored only in this browser."):t("Download a JSON file recording where every image came from (for reproducibility).")}><Download size={16}/>{exportBusy?t("Preparing…"):t("Download series metadata")}</button>{exportError&&<span className="passport-error" role="alert">{msg(exportError)}</span>}</div></div>
         <div className="viewer-panel"><div className="viewer-toolbar">{field&&!moving?<span className="view-label" title={t("All exposures are aligned on the same sky coordinates (ICRS).")}>{t("Aligned on the sky")}</span>:<Tabs value={mode} onValueChange={v => setMode(v as Mode)}><TabsList><TabsTrigger value="sky" title={t("Stars stay still; a moving object travels across the image.")}>{moving?t("Fixed field"):t("Fixed sky")}</TabsTrigger><TabsTrigger value="object" title={t("The image follows the object; the stars drift past it.")}>{moving?t("Follow target"):t("Follow comet")}</TabsTrigger></TabsList></Tabs>}<span className="frame-count" aria-live={playing ? "off" : "polite"}>{data ? `${String(index + 1).padStart(2, "0")} / ${data.frames.length}` : "—"}</span></div>
           <div className="view-options"><label title={t("Show a second (reference) exposure next to the current one.")}><Switch checked={compare} onCheckedChange={setCompare} disabled={!data}/>{t("Compare")}</label><label title={t("Dashed circle: where a catalogue expects the target, or the centre you asked for. It is not a detection.")}><Switch checked={marker} onCheckedChange={setMarker}/>{field?(data?.query?.most?t("MOST position"):data?.query?.ephemeris?t("Horizons position"):t("Query centre")):t("IRSA prediction")}</label>{liveArchive&&field&&mode==="sky"&&<label><Switch checked={gaiaEnabled} onCheckedChange={value=>void toggleGaia(value)}/>{t("Gaia DR3 stars")}</label>}<label title={t("Orange layer: pixels the archive flagged as suspicious (hot pixels, cosmic rays, ghosts…). The data underneath is kept.")}><Switch checked={mask} onCheckedChange={setMask}/>{t("Quality overlay")}</label><label title={t("Show the sky globe's centre as a cyan cross on the images, and click any point of an image to move the globe there.")}><Switch checked={linked} onCheckedChange={value => { setLinked(value); setPicked(null); }}/>{t("Link with sky globe")}</label></div>
           {linked && data && <div className="globe-link-status" role="status">{mode !== "sky" ? t("Linking with the globe works in the fixed-sky view.") : <>{globeInside ? t("The cyan cross marks the centre of the sky globe.") : globeOffset !== null ? t("The sky globe is centred {d}′ away from this field, outside the image.", { d: globeOffset < 600 ? globeOffset.toFixed(1) : Math.round(globeOffset) }) : null} {pickedCurrent ? <>{t("Globe moved to RA {ra}°, Dec {dec}°.", { ra: pickedCurrent.ra.toFixed(5), dec: pickedCurrent.dec.toFixed(5) })} <button type="button" className="text-link" onClick={() => atlas.current?.reveal()}>{t("Show on the globe ↑")}</button></> : t("Click any point of an image to show it on the globe.")}</>}</div>}
           {field&&mode==="sky"&&gaiaEnabled&&<div className="gaia-status" role="status">{gaiaLoading?t("Asking IRSA TAP for Gaia DR3 stars…"):gaiaError?msg(gaiaError):gaia&&<><span>{t("{n} Gaia DR3 stars returned in the search cone",{n:gaia.record_count})}{gaia.truncated?t("; more matches exist beyond the 1200 limit"):""}. {t("Positions shown for the current exposure, MJD {mjd}",{mjd:frame?.mjd.toFixed(5)??"—"})}{compare&&refFrame&&t("; reference exposure MJD {mjd}",{mjd:refFrame.mjd.toFixed(5)})}. {t("Each star's position is updated for every exposure using its proper motion.")}</span><details><summary>{t("Method and catalogue limits")}</summary><p>{t("The selection holds up to 1200 sources with a measured G magnitude, brightest first. Positions are propagated with constant proper motion from ref_epoch; if motion components are missing, the original catalogue position is shown. Parallax, radial velocity and covariances are not applied. The circles are Gaia catalogue positions, not SPHEREx detections or astrometric measurements by this pipeline.")}</p></details></>}</div>}
-          {frame && data ? <div className={`frame-stage ${compare ? "is-comparing" : ""}`}><SkyFrame frame={frame} mode={mode} marker={marker} mask={mask} label={t("Current exposure")} field={mode === "sky" ? data.display.sky_fov_deg : data.display.object_fov_deg} moving={moving} gaia={field&&gaiaEnabled&&mode==="sky"?gaia:null} globe={globeInside ? globePixel : null} onPick={pickPoint}/>{compare && refFrame && <SkyFrame frame={refFrame} mode={mode} marker={marker} mask={mask} label={t("Reference exposure")} field={mode === "sky" ? data.display.sky_fov_deg : data.display.object_fov_deg} moving={moving} gaia={field&&gaiaEnabled&&mode==="sky"?gaia:null} globe={globeInside ? globePixel : null} onPick={pickPoint}/>}</div> : <div className="viewer-empty" role="status">{error ? <><p>{msg(error)}</p><button className="button" onClick={() => setAttempt(a => a + 1)}>{t("Try again")}</button></> : <><Skeleton className="h-64 w-64"/><p>{t("Loading exposures…")}</p></>}</div>}
+          {frame && data ? <div className={`frame-stage ${compare ? "is-comparing" : ""}`}>{showDifference && refFrame && displayScale ? <><SkyFrame frame={frame} mode={mode} marker={marker} mask={mask} label={t("Current exposure")} field={mode === "sky" ? data.display.sky_fov_deg : data.display.object_fov_deg} moving={moving} gaia={field&&gaiaEnabled&&mode==="sky"?gaia:null} globe={globeInside ? globePixel : null} onPick={pickPoint}/><DifferenceFrame frame={frame} reference={refFrame} mode={mode} scale={displayScale} field={mode === "sky" ? data.display.sky_fov_deg : data.display.object_fov_deg} gaia={field&&gaiaEnabled&&mode==="sky"?gaia:null}/></> : <><SkyFrame frame={frame} mode={mode} marker={marker} mask={mask} label={t("Current exposure")} field={mode === "sky" ? data.display.sky_fov_deg : data.display.object_fov_deg} moving={moving} gaia={field&&gaiaEnabled&&mode==="sky"?gaia:null} globe={globeInside ? globePixel : null} onPick={pickPoint}/>{compare && refFrame && <SkyFrame frame={refFrame} mode={mode} marker={marker} mask={mask} label={t("Reference exposure")} field={mode === "sky" ? data.display.sky_fov_deg : data.display.object_fov_deg} moving={moving} gaia={field&&gaiaEnabled&&mode==="sky"?gaia:null} globe={globeInside ? globePixel : null} onPick={pickPoint}/>}</>}</div> : <div className="viewer-empty" role="status">{error ? <><p>{msg(error)}</p><button className="button" onClick={() => setAttempt(a => a + 1)}>{t("Try again")}</button></> : <><Skeleton className="h-64 w-64"/><p>{t("Loading exposures…")}</p></>}</div>}
           {compare && frame && refFrame && difference && <div className="compare-controls" aria-label={t("Difference between the two exposures")}>
             <div>{t("Time apart")} <strong>{(Math.abs(frame.mjd - refFrame.mjd) * 1440).toFixed(1)} {t("min")}</strong></div>
             <div title={t("SPHEREx sees each exposure in a slightly different infrared colour.")}>{t("Wavelength difference")} <strong>≈ {difference.delta.toFixed(4)} {t("µm")}</strong></div>
+            <div className="compare-style" role="radiogroup" aria-label={t("How to compare")}>
+              <button type="button" role="radio" aria-checked={compareStyle==="side"} className={`button ${compareStyle==="side"?"active":""}`} onClick={()=>setCompareStyle("side")}>{t("Side by side")}</button>
+              <button type="button" role="radio" aria-checked={compareStyle==="difference"} className={`button ${compareStyle==="difference"?"active":""}`} onClick={()=>setCompareStyle("difference")} disabled={!displayScale} title={displayScale?t("Show where the two exposures differ: white is brighter now, black was brighter before."):t("This series has no known brightness scale, so a difference can't be computed.")}>{t("Difference")}</button>
+            </div>
           </div>}
           {data?.completeness?.selection.startsWith("Selected pair only.") && <p className="compare-controls">{t("Showing the 2 chosen exposures out of {n} found. The brightness scale is set for this pair. Build the full series with \"Find exposures\".",{n:data.completeness.matched_count})}</p>}
           {compare && data && <div className="compare-controls"><label>{t("Reference exposure")}</label><Slider min={0} max={data.frames.length-1} step={1} value={[reference]} onValueChange={([v])=>setReference(v)} aria-label={t("Choose the reference exposure to compare with")} aria-valuetext={refFrame?`${reference+1}, ${timeLabel(refFrame.date)} UTC`:undefined}/>{frame && refFrame && <span>{reference+1} / {data.frames.length}</span>}</div>}
