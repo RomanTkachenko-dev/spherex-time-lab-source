@@ -13,7 +13,16 @@ export default defineConfig({
   publicDir: false,
   resolve: { alias: { "@": resolve(".") } },
   define: { __PAGES_BASE__: JSON.stringify(base), __API_ORIGIN__: JSON.stringify(api) },
-  build: { outDir: out, emptyOutDir: true, sourcemap: false },
+  build: {
+    outDir: out, emptyOutDir: true, sourcemap: false,
+    // Static site pages around the lab: overview at the root, the lab itself under lab/.
+    rollupOptions: { input: {
+      overview: resolve("pages/index.html"),
+      lab: resolve("pages/lab/index.html"),
+      method: resolve("pages/method/index.html"),
+      about: resolve("pages/about/index.html"),
+    } },
+  },
   plugins: [{
     name: "pages-runtime-assets",
     closeBundle() {
