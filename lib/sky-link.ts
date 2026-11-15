@@ -1,4 +1,4 @@
-// Link between the sky globe and the exposure viewer (UI only).
+// Link between the sky atlas and the exposure viewer (UI only).
 // The viewer's "fixed sky" panels share one gnomonic (TAN) grid of 256 × 256 pixels centred on
 // manifest.display.sky_center_ra/dec with width sky_fov_deg, north up and east left. Pixel
 // coordinates follow the pipeline's marker_sky convention: the grid centre is (127.5, 127.5) and
