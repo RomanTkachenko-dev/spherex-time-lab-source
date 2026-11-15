@@ -21,9 +21,10 @@ export async function GET(request: Request) {
   for (const mirror of mirrors) {
     source = new URL(mirror); source.search = query;
     try {
-      const attempt = await fetch(source, { signal: AbortSignal.timeout(8000), headers: { Accept: "application/xml, text/xml", "User-Agent": "SPHEREx-Time-Lab/1.0 (+https://github.com/RomanTkachenko-dev/spherex-time-lab-source)" } });
+      const attempt = await fetch(source, { signal: AbortSignal.timeout(3000), headers: { Accept: "application/xml, text/xml", "User-Agent": "SPHEREx-Time-Lab/1.0 (+https://github.com/RomanTkachenko-dev/spherex-time-lab-source)" } });
       reachable = true;
       if (attempt.ok) { response = attempt; break; }
+      await attempt.body?.cancel();
     } catch { /* try the next mirror */ }
   }
   if (!response) {

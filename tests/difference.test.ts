@@ -41,3 +41,9 @@ test("bundled demo series expose an invertible display scale", () => {
   }
   assert.equal(manifestScale({ low_MJy_sr: 1, high_MJy_sr: 2, stretch: "linear" }), null);
 });
+
+test("display clipping at either endpoint is excluded", () => {
+  const result = differenceImage(rgba([0, 42, 100]), rgba([42, 255, 100]), null, null, scale);
+  assert.equal(result.clippedCount, 2);
+  assert.deepEqual([result.rgba[3], result.rgba[7], result.rgba[11]], [0, 0, 255]);
+});

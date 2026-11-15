@@ -3,6 +3,9 @@ import { createContext, useContext } from "react";
 export type Language = "en" | "uk";
 export const LanguageContext = createContext<Language>("en");
 const english: Record<string, string> = {
+  "Немає спільних придатних пікселів.": "No usable pixels are shared by these exposures.",
+  "Візуальна різниця PNG. Форма джерел і спектральний відгук кадрів можуть відрізнятися.": "Visual PNG difference. Source profiles and spectral responses can differ between exposures.",
+  "Не вдалося прочитати кадр або маску якості.": "Could not read an exposure or its quality mask.",
   "Закрити": "Close",
   "Завантажимо два вибрані кадри та відкриємо їх поруч. Вимірювання виконуються на окремих FITS, не на фоновій мозаїці.": "Load the two selected exposures side by side. Measurements use individual FITS files.",
   "Перевірте покриття центра карти, щоб побачити контур експозиції та її час. Відсутність контуру до запиту не означає відсутності спостережень.": "Search the map center to see exposure footprints and times.",
@@ -21,6 +24,13 @@ const english: Record<string, string> = {
   "мкм": "µm",
   "хв": "min",
   "Мова": "Language",
+  "Тестові об’єкти челенджу": "Challenge test targets",
+  "ТЕСТОВІ ОБ’ЄКТИ": "TEST TARGETS",
+  "Змінна зоря · яскравість": "Variable star · brightness",
+  "рік": "yr",
+  "пікс./рік": "px/yr",
+  "Потрібна серверна версія з пошуком архіву.": "Requires the server version with archive search.",
+  "Ці приклади запускають живий пошук архіву, тому працюють лише із серверною частиною.": "These examples run a live archive search, so they need the server part.",
   "Небесна сфера": "Sky globe",
   "ОГЛЯД НЕБА · ICRS": "SKY SURVEY · ICRS",
   "Оберніть небо. Оберіть ділянку. Знайдіть її спостереження.": "Choose a patch of sky and find its exposures.",
@@ -139,7 +149,7 @@ const english: Record<string, string> = {
   "Різницеве зображення двох кадрів SPHEREx": "Difference image of two SPHEREx exposures",
   "Обчислення різниці…": "Computing difference…",
   "Не вдалося прочитати кадри для різниці.": "Could not read the frames for the difference.",
-  "Білий — яскравіше в поточному кадрі, чорний — в опорному, сірий — без змін. Рухомий об’єкт дає пару «чорна пляма — біла пляма». Клітинки — виключені пікселі (прапорці якості, відсутні дані або насичення).": "White: brighter in the current frame; black: brighter in the reference; grey: no change. A moving object leaves a black–white pair. Checkered pixels are excluded (quality flags, missing data or saturation).",
+  "Білий — яскравіше в поточному кадрі, чорний — в опорному, сірий — без змін. Рухомий об’єкт дає пару «чорна пляма — біла пляма». Клітинки — виключені пікселі (прапорці якості, відсутні дані або обрізання шкалою).": "White: brighter in the current frame; black: brighter in the reference; grey: no change. A moving object leaves a black–white pair. Checkered pixels are excluded (quality flags, missing data or display clipping).",
   "Виключено": "Excluded",
   "Кола Gaia DR3: блакитні — епоха поточного кадру, рожеві — опорного.": "Gaia DR3 circles: cyan at the current epoch, pink at the reference epoch.",
   "Спосіб порівняння": "Comparison style",

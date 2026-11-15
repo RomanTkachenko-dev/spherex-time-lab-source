@@ -18,6 +18,7 @@ import { readDisplayAsset } from "@/lib/frame-assets";
 import { differenceImage, manifestScale, type DifferenceResult, type DisplayScale } from "@/lib/difference";
 import { restoreActiveSession, saveSession, updateSessionView, type SavedSession, type SessionView } from "@/lib/sessions";
 import SessionLibrary from "./session-library";
+import { BENCHMARK_TARGETS, annualMotion, benchmarkSearch } from "@/lib/benchmark-targets";
 import FrameNavigation from "./frame-navigation";
 import ScienceLab from "./science-lab";
 
@@ -89,8 +90,16 @@ function useImagePixels(src: string) {
       canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
       const context = canvas.getContext("2d", { willReadFrequently: true });
       if (!context) { setState({src,pixels:null,failed:true}); return; }
-      context.drawImage(image, 0, 0);
-      setState({src,pixels:context.getImageData(0,0,canvas.width,canvas.height).data,failed:false});
+      if (canvas.width !== 256 || canvas.height !== 256) {
+        setState({src,pixels:null,failed:true});
+        return;
+      }
+      try {
+        context.drawImage(image, 0, 0);
+        setState({src,pixels:context.getImageData(0,0,canvas.width,canvas.height).data,failed:false});
+      } catch {
+        setState({src,pixels:null,failed:true});
+      }
     };
     image.onerror = () => { if (active) setState({src,pixels:null,failed:true}); };
     image.src = publicAsset(src);
@@ -108,16 +117,15 @@ function GaiaCircles({ gaia, field, mjd, colour, label }: { gaia: GaiaReference;
 function DifferenceFrame({ frame, reference, mode, scale, field, gaia }: { frame: Frame; reference: Frame; mode: Mode; scale: DisplayScale; field: number; gaia: GaiaReference | null }) {
   const t = useTranslation();
   const a = frameSources(frame, mode), b = frameSources(reference, mode);
-  const imageA = useImagePixels(useDisplaySource(a.image).source), imageB = useImagePixels(useDisplaySource(b.image).source);
-  const maskA = useImagePixels(useDisplaySource(a.mask).source), maskB = useImagePixels(useDisplaySource(b.mask).source);
+  const imageSourceA = useDisplaySource(a.image), imageSourceB = useDisplaySource(b.image);
+  const maskSourceA = useDisplaySource(a.mask), maskSourceB = useDisplaySource(b.mask);
+  const imageA = useImagePixels(imageSourceA.source), imageB = useImagePixels(imageSourceB.source);
+  const maskA = useImagePixels(maskSourceA.source), maskB = useImagePixels(maskSourceB.source);
   const canvas = useRef<HTMLCanvasElement>(null);
   const result = useMemo<DifferenceResult | null>(() => {
     if (!imageA.pixels || !imageB.pixels) return null;
-    // A missing mask file only removes the quality exclusion, not the difference itself.
-    const ready = (m: typeof maskA) => m.pixels ?? (m.failed || !m.src ? null : undefined);
-    const ma = ready(maskA), mb = ready(maskB);
-    if (ma === undefined || mb === undefined) return null;
-    try { return differenceImage(imageA.pixels, imageB.pixels, ma, mb, scale); } catch { return null; }
+    if (!maskA.pixels || !maskB.pixels) return null;
+    return differenceImage(imageA.pixels, imageB.pixels, maskA.pixels, maskB.pixels, scale);
   }, [imageA.pixels, imageB.pixels, maskA, maskB, scale]);
   useEffect(() => {
     const node = canvas.current, context = node?.getContext("2d");
@@ -126,17 +134,20 @@ function DifferenceFrame({ frame, reference, mode, scale, field, gaia }: { frame
     node.width = node.height = size;
     context.putImageData(new ImageData(new Uint8ClampedArray(result.rgba), size, size), 0, 0);
   }, [result]);
-  const failed = imageA.failed || imageB.failed;
+  const failed = [imageA, imageB, maskA, maskB].some(asset => asset.failed) ||
+    [imageSourceA, imageSourceB, maskSourceA, maskSourceB].some(asset => asset.error);
+  const empty = result?.validCount === 0;
   const total = result ? result.validCount + result.maskedCount + result.clippedCount : 0;
   const excluded = result && total ? (100 * (result.maskedCount + result.clippedCount) / total).toFixed(1) : null;
   return <figure className="sky-frame difference-frame">
-    <figcaption><span>{t("Різниця: поточний − опорний")}</span><time>{frame.date.slice(0,10)} − {reference.date.slice(0,10)}</time>{result && <span>±{result.limit.toPrecision(3)} MJy/sr</span>}</figcaption>
+    <figcaption><span>{t("Різниця: поточний − опорний")}</span><time>{frame.date.slice(0,10)} − {reference.date.slice(0,10)}</time></figcaption>
     <div className="image-space"><div className="sky-plane difference-plane">
-      <canvas ref={canvas} width={256} height={256} role="img" aria-label={t("Різницеве зображення двох кадрів SPHEREx")}/>
+      <canvas style={{visibility: result && !empty ? "visible" : "hidden"}} ref={canvas} width={256} height={256} role="img" aria-label={t("Різницеве зображення двох кадрів SPHEREx")}/>
+      {empty && <div className="asset-loading" role="status">{t("Немає спільних придатних пікселів.")}</div>}
       {!result && !failed && <div className="asset-loading" role="status">{t("Обчислення різниці…")}</div>}
       {gaia && mode === "sky" && <><GaiaCircles gaia={gaia} field={field} mjd={reference.mjd} colour="#e58ad8" label={`Gaia DR3, MJD ${reference.mjd.toFixed(5)}`}/><GaiaCircles gaia={gaia} field={field} mjd={frame.mjd} colour="#68d8e5" label={`Gaia DR3, MJD ${frame.mjd.toFixed(5)}`}/></>}
-    </div>{failed && <div className="image-error" role="alert">{t("Не вдалося прочитати кадри для різниці.")}</div>}<div className="orientation" title="Північ угорі, схід ліворуч">N ↑<br/>E ←</div><span className="field-size">Поле ≈ {(field * 60).toFixed(1)}′</span></div>
-    <p className="difference-legend">{t("Білий — яскравіше в поточному кадрі, чорний — в опорному, сірий — без змін. Рухомий об’єкт дає пару «чорна пляма — біла пляма». Клітинки — виключені пікселі (прапорці якості, відсутні дані або насичення).")}{excluded !== null && ` ${t("Виключено")}: ${excluded}%.`}{gaia && mode === "sky" && ` ${t("Кола Gaia DR3: блакитні — епоха поточного кадру, рожеві — опорного.")}`}</p>
+    </div>{failed && <div className="image-error" role="alert">{t("Не вдалося прочитати кадр або маску якості.")}</div>}<div className="orientation" title="Північ угорі, схід ліворуч">N ↑<br/>E ←</div><span className="field-size">Поле ≈ {(field * 60).toFixed(1)}′</span></div>
+    <p className="difference-legend"><strong>{t("Візуальна різниця PNG. Форма джерел і спектральний відгук кадрів можуть відрізнятися.")}</strong> {t("Білий — яскравіше в поточному кадрі, чорний — в опорному, сірий — без змін. Рухомий об’єкт дає пару «чорна пляма — біла пляма». Клітинки — виключені пікселі (прапорці якості, відсутні дані або обрізання шкалою).")}{excluded !== null && ` ${t("Виключено")}: ${excluded}%.`}{gaia && mode === "sky" && ` ${t("Кола Gaia DR3: блакитні — епоха поточного кадру, рожеві — опорного.")}`}</p>
   </figure>;
 }
 
@@ -316,7 +327,7 @@ function ObservatoryView({language, link, switchLanguage}: {
     {!liveArchive && <p className="intro" role="note">Демонстрація GitHub Pages: небесна мозаїка, серії 3I/ATLAS і DR1 та локальні сесії. Пошук архіву, Gaia та аналіз FITS доступні у серверній версії.</p>}
     <SkyAtlas language={language} link={link} manifest={data} onSearch={target => { setPlaying(false); fieldSearch.current?.prepareAt(target); }} onCurrentSeries={() => viewer.current?.scrollIntoView({ behavior: "smooth", block: "start" })}/>
     <div className="workspace">
-      <aside className="library"><div className="section-label">{t("СПОСТЕРЕЖЕННЯ")}</div><h1>{t("Небо в русі")}</h1><p className="intro">{t("Порівнюйте справжні кадри SPHEREx у часі.")}</p><button className={`target ${field?"":"active"}`} onClick={()=>{if(demo.current)void prepared(demo.current).catch(e=>setSessionError(e instanceof Error?e.message:"Не вдалося зберегти серію."));}}><Orbit className="target-icon"/><span><strong>3I / ATLAS</strong><small>{t("Готовий приклад · 12 кадрів")}</small></span></button><button className="target" onClick={()=>void openEpochDemo()}><Orbit className="target-icon"/><span><strong>{t("Поле DR1")}</strong><small>{t("4 кадри · серпень 2025 — лютий 2026")}</small></span></button>{field&&<div className="active-field"><strong>{data.title}</strong><small>{t("Поточна серія")}</small></div>}<div className="dataset-details"><span>{data?.frames[0].date.slice(0,10)} — {data?.frames.at(-1)?.date.slice(0,10)}</span><span>{data?.frames.length ?? "—"} кадрів · {frame?.detector ?? "—"}</span><span>{archiveLabel} · інфрачервоне світло</span></div>{liveArchive && <FieldSearch controlRef={fieldSearch} onOpen={() => setPlaying(false)} onPrepared={prepared}/>}<SessionLibrary manifest={passportManifest} view={exportView} currentSessionId={sessionId} onLoad={openSession} onSaved={session=>{setSessionId(session.id);setSessionRevision(r=>r+1);}} refreshKey={sessionRevision}/>{sessionError&&<p className="session-error" role="alert">{sessionError}</p>}<div className="library-note"><Telescope size={22}/><p>Почніть із відтворення. Шукайте зміни положень відносно зір на спільному полі неба.</p><p>Увімкніть порівняння, щоб розглянути два моменти поруч.</p></div><a className="text-link library-source" href={data?.source ?? "https://irsa.ipac.caltech.edu/Missions/spherex.html"} target="_blank" rel="noreferrer">{t("Про цей набір")} <ArrowUpRight size={15}/></a></aside>
+      <aside className="library"><div className="section-label">{t("СПОСТЕРЕЖЕННЯ")}</div><h1>{t("Небо в русі")}</h1><p className="intro">{t("Порівнюйте справжні кадри SPHEREx у часі.")}</p><button className={`target ${field?"":"active"}`} onClick={()=>{if(demo.current)void prepared(demo.current).catch(e=>setSessionError(e instanceof Error?e.message:"Не вдалося зберегти серію."));}}><Orbit className="target-icon"/><span><strong>3I / ATLAS</strong><small>{t("Готовий приклад · 12 кадрів")}</small></span></button><button className="target" onClick={()=>void openEpochDemo()}><Orbit className="target-icon"/><span><strong>{t("Поле DR1")}</strong><small>{t("4 кадри · серпень 2025 — лютий 2026")}</small></span></button><div className="benchmark-targets" role="group" aria-label={t("Тестові об’єкти челенджу")}><div className="section-label">{t("ТЕСТОВІ ОБ’ЄКТИ")}</div>{BENCHMARK_TARGETS.map(target=>{const motion=annualMotion(target);return <button key={target.id} type="button" className="target benchmark" disabled={!liveArchive} title={liveArchive?`${target.reference}`:t("Потрібна серверна версія з пошуком архіву.")} onClick={()=>{setPlaying(false);fieldSearch.current?.prepareAt(benchmarkSearch(target));}}><Orbit className="target-icon"/><span><strong>{target.name}</strong><small>{target.kind==="variable"?t("Змінна зоря · яскравість"):`${motion.arcsec.toFixed(1)}″/${t("рік")} ≈ ${motion.pixels.toFixed(1)} ${t("пікс./рік")}`} · D{target.detector}</small></span></button>;})}{!liveArchive&&<p className="benchmark-note">{t("Ці приклади запускають живий пошук архіву, тому працюють лише із серверною частиною.")}</p>}</div>{field&&<div className="active-field"><strong>{data.title}</strong><small>{t("Поточна серія")}</small></div>}<div className="dataset-details"><span>{data?.frames[0].date.slice(0,10)} — {data?.frames.at(-1)?.date.slice(0,10)}</span><span>{data?.frames.length ?? "—"} кадрів · {frame?.detector ?? "—"}</span><span>{archiveLabel} · інфрачервоне світло</span></div>{liveArchive && <FieldSearch controlRef={fieldSearch} onOpen={() => setPlaying(false)} onPrepared={prepared}/>}<SessionLibrary manifest={passportManifest} view={exportView} currentSessionId={sessionId} onLoad={openSession} onSaved={session=>{setSessionId(session.id);setSessionRevision(r=>r+1);}} refreshKey={sessionRevision}/>{sessionError&&<p className="session-error" role="alert">{sessionError}</p>}<div className="library-note"><Telescope size={22}/><p>Почніть із відтворення. Шукайте зміни положень відносно зір на спільному полі неба.</p><p>Увімкніть порівняння, щоб розглянути два моменти поруч.</p></div><a className="text-link library-source" href={data?.source ?? "https://irsa.ipac.caltech.edu/Missions/spherex.html"} target="_blank" rel="noreferrer">{t("Про цей набір")} <ArrowUpRight size={15}/></a></aside>
       <section className="lab-main" ref={viewer} tabIndex={0} aria-label="Переглядач. Стрілки змінюють кадр, пробіл запускає відтворення.">
         <div className="workspace-heading"><div><div className="section-label">РЕАЛЬНІ ДАНІ / SPHEREx {archiveLabel}</div><h2>{data?.title ?? "SPHEREx"}</h2></div><div className="passport-actions"><button className="button" type="button" onClick={()=>void downloadPassport()} disabled={!data||exportBusy} title={data?.schema_version===4||data?.display.asset_storage==="indexeddb-sha256-v1"?"JSON містить хеші PNG, які зберігаються локально в цьому браузері.":"Завантажити перевірений науковий паспорт."}><Download size={16}/>{exportBusy?t("Формуємо…"):"Завантажити паспорт серії"}</button>{exportError&&<span className="passport-error" role="alert">{exportError}</span>}</div></div>
         <div className="viewer-panel"><div className="viewer-toolbar">{field&&!moving?<span className="view-label">{t("Спільне поле ICRS")}</span>:<Tabs value={mode} onValueChange={v => setMode(v as Mode)}><TabsList><TabsTrigger value="sky">{moving?"Нерухоме поле":"Нерухоме небо"}</TabsTrigger><TabsTrigger value="object">{moving?"За ціллю":"За кометою"}</TabsTrigger></TabsList></Tabs>}<span className="frame-count" aria-live={playing ? "off" : "polite"}>{data ? `${String(index + 1).padStart(2, "0")} / ${data.frames.length}` : "—"}</span></div>

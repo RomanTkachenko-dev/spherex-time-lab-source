@@ -7,8 +7,7 @@
  *
  * Limits of this method (also shown in the interface):
  * - 8-bit quantisation: one grey step is a larger brightness step near `high`;
- * - grey level 255 is saturated by the stretch (true value unknown) and is excluded;
- *   grey level 0 is read as the lower limit, so faint background differences are compressed;
+ * - grey levels 0 and 255 are excluded because the underlying value may be clipped;
  * - pixels marked in either quality mask (bad FLAGS or missing data) are excluded;
  * - no PSF or spectral-response matching: SPHEREx frames taken on different dates
  *   usually sample different wavelengths, so stars of different colours leave residuals.
@@ -67,7 +66,7 @@ export function differenceImage(
     const p = i * 4;
     if ((currentMask && currentMask[p + 3] > 0) || (referenceMask && referenceMask[p + 3] > 0)) { masked++; continue; }
     const a = current[p], b = reference[p];
-    if (a === 255 || b === 255) { clipped++; continue; }
+    if (a === 0 || b === 0 || a === 255 || b === 255) { clipped++; continue; }
     diff[valid] = lookup[a] - lookup[b];
     validIndex[valid++] = i;
   }
@@ -85,5 +84,5 @@ export function differenceImage(
 export function manifestScale(display: { low_MJy_sr: number; high_MJy_sr: number; [key: string]: unknown }): DisplayScale | null {
   const stretch = display.stretch === "asinh" ? Number(display.stretch_parameter) : NaN;
   const low = display.low_MJy_sr, high = display.high_MJy_sr;
-  return Number.isFinite(low) && Number.isFinite(high) && high > low && stretch > 0 ? { low, high, stretch } : null;
+  return Number.isFinite(low) && Number.isFinite(high) && high > low && Number.isFinite(stretch) && stretch > 0 ? { low, high, stretch } : null;
 }
