@@ -9,3 +9,11 @@
 @media(max-width:850px){.atlas-canvas{height:clamp(430px,68dvh,680px)}}
 @media(max-width:480px){.atlas-controls>label{grid-column:1/-1}}
 .sky-atlas .atlas-primary:hover:not(:disabled){background:#a3ccfb;color:#111a24}.sky-atlas .atlas-primary:active:not(:disabled){background:#64a0e4}.sky-atlas .atlas-primary:focus-visible{outline:2px solid #e9eef3;outline-offset:2px}.sky-atlas .atlas-primary:disabled{background:#333c47;color:#bfc8d3;opacity:1;cursor:not-allowed}
+
+
+.atlas-controls{min-width:0;container-type:inline-size}
+.atlas-pair{grid-template-columns:repeat(2,minmax(0,1fr))}
+.atlas-pair>label{min-width:0}
+.atlas-pair input[type=date]{box-sizing:border-box;max-width:100%}
+@media(max-width:850px){.atlas-filters>.atlas-pair:first-child{grid-column:1/-1}}
+@container (max-width:355px){.atlas-filters>.atlas-pair:first-child{grid-template-columns:minmax(0,1fr)}}
