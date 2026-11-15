@@ -135,6 +135,17 @@ const english: Record<string, string> = {
   "Відкрити": "Open",
   "Як читати ці кадри": "How to read these images",
   "Відкриті дані. Простежувані джерела.": "Open data with traceable sources.",
+  "Різниця: поточний − опорний": "Difference: current − reference",
+  "Різницеве зображення двох кадрів SPHEREx": "Difference image of two SPHEREx exposures",
+  "Обчислення різниці…": "Computing difference…",
+  "Не вдалося прочитати кадри для різниці.": "Could not read the frames for the difference.",
+  "Білий — яскравіше в поточному кадрі, чорний — в опорному, сірий — без змін. Рухомий об’єкт дає пару «чорна пляма — біла пляма». Клітинки — виключені пікселі (прапорці якості, відсутні дані або насичення).": "White: brighter in the current frame; black: brighter in the reference; grey: no change. A moving object leaves a black–white pair. Checkered pixels are excluded (quality flags, missing data or saturation).",
+  "Виключено": "Excluded",
+  "Кола Gaia DR3: блакитні — епоха поточного кадру, рожеві — опорного.": "Gaia DR3 circles: cyan at the current epoch, pink at the reference epoch.",
+  "Спосіб порівняння": "Comparison style",
+  "Поруч": "Side by side",
+  "Різниця": "Difference",
+  "Для цієї серії шкала яскравості невідома, тому різницю не обчислити.": "This series has no known brightness scale, so a difference cannot be computed.",
   "Дослідницька версія · 0.10": "Research version · 0.10"
 };
 export function useTranslation() {
