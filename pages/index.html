@@ -15,7 +15,8 @@
     // Old deep links and embeds pointed at the site root. Send them to the lab with the same query.
     (function () {
       var q = new URLSearchParams(location.search);
-      var keys = ['ra', 'dec', 'fov', 'start', 'end', 'detector', 'release', 'survey', 'search', 'embed', 'lang'];
+      // lang alone is the site language switch, so it stays on this page.
+      var keys = ['ra', 'dec', 'fov', 'start', 'end', 'detector', 'release', 'survey', 'search', 'embed'];
       if (keys.some(function (k) { return q.has(k); })) location.replace('lab/' + location.search + location.hash);
     })();
   </script>
