@@ -51,3 +51,4 @@ next-env.d.ts
 __pycache__/
 /research/results/
 /research/data/
+CLAUDE.md
