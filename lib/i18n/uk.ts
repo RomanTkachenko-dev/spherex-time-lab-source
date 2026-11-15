@@ -22,6 +22,7 @@ export const ukrainian: Record<string, string> = {
   "Select": "Обрати",
   "Language": "Мова",
   "About": "Про проєкт",
+  "Team": "Команда",
   "µm": "мкм",
   "µJy": "мкЯн",
   "min": "хв",

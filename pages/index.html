@@ -15,7 +15,8 @@
     // Old deep links and embeds pointed at the site root. Send them to the lab with the same query.
     (function () {
       var q = new URLSearchParams(location.search);
-      var keys = ['ra', 'dec', 'fov', 'start', 'end', 'detector', 'release', 'survey', 'search', 'embed', 'lang'];
+      // lang alone is the site language switch, so it stays on this page.
+      var keys = ['ra', 'dec', 'fov', 'start', 'end', 'detector', 'release', 'survey', 'search', 'embed'];
       if (keys.some(function (k) { return q.has(k); })) location.replace('lab/' + location.search + location.hash);
     })();
   </script>
@@ -32,6 +33,7 @@
         <a class="tab" href="lab/"><span class="tab-no">02</span>Lab</a>
         <a class="tab" href="about/"><span class="tab-no">03</span>About</a>
       </nav>
+      <label class="lang-picker"><span>Language</span><select data-site-language aria-label="Language / Мова"><option value="en">English</option><option value="uk">Українська</option></select></label>
     </div>
   </header>
 
@@ -172,5 +174,6 @@
     </div>
   </footer>
   <script>document.querySelectorAll('[data-year]').forEach(function (el) { el.textContent = new Date().getFullYear(); });</script>
+  <script type="module" src="/site-i18n.js"></script>
 </body>
 </html>
