@@ -21,7 +21,10 @@ export class IrsaCatalogueError extends Error {
   }
 }
 
-/** One retry for transient failures, within a single overall deadline.
+/** IRSA's SIA gateway returns short bursts of 502/503; observed bursts last a few seconds. */
+export const IRSA_ATTEMPTS = 4;
+
+/** Retries transient failures (gateway errors, network) within a single overall deadline.
  * Keep the original URL and raw XML so provenance and overflow are unchanged.
  */
 export async function fetchIrsaCatalogue(
@@ -30,7 +33,7 @@ export async function fetchIrsaCatalogue(
 ) {
   const fetcher = options.fetcher ?? fetch;
   const signal = AbortSignal.timeout(options.timeoutMs ?? 45000);
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < IRSA_ATTEMPTS; attempt++) {
     try {
       const response = await fetcher(url, { signal, cache: "no-store", headers: { Accept: "application/x-votable+xml" } });
       if (!response.ok) {
@@ -45,8 +48,9 @@ export async function fetchIrsaCatalogue(
       const error = signal.aborted
         ? new IrsaCatalogueError("IRSA_TIMEOUT")
         : cause instanceof IrsaCatalogueError ? cause : new IrsaCatalogueError("IRSA_NETWORK");
-      if (attempt === 1 || !error.retryable || signal.aborted) throw error;
-      await new Promise(resolve => setTimeout(resolve, options.retryDelayMs ?? 500));
+      if (attempt === IRSA_ATTEMPTS - 1 || !error.retryable || signal.aborted) throw error;
+      // Linear back-off, as for FITS cutouts (app/api/cutout/route.ts): 0.5 s, 1 s, 1.5 s.
+      await new Promise(resolve => setTimeout(resolve, (options.retryDelayMs ?? 500) * (attempt + 1)));
       if (signal.aborted) throw new IrsaCatalogueError("IRSA_TIMEOUT");
     }
   }
